@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.4.1`
-- Build en desarrollo: `14`
-- Último tag publicado antes de este cambio: `v0.4.0`
+- Versión en desarrollo: `0.4.2`
+- Build en desarrollo: `15`
+- Último tag publicado antes de este cambio: `v0.4.1`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -33,6 +33,7 @@
 - OCR local con Vision detecta texto de la captura y lo copia al portapapeles.
 - Las miniaturas participan en todos los Spaces y acompañan al usuario al
   cambiar de escritorio.
+- `Guardar como…` recuerda mediante `UserDefaults` la última carpeta elegida.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.

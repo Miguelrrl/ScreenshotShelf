@@ -6,6 +6,7 @@ private let appName = "ScreenshotShelf"
 private let panelSize = NSSize(width: 192, height: 147)
 private let edgeMargin: CGFloat = 64
 private let panelGap: CGFloat = 12
+private let lastSaveAsDirectoryKey = "LastSaveAsDirectory"
 
 @discardableResult
 private func run(_ executable: String, _ arguments: [String]) -> String {
@@ -370,7 +371,12 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         savePanel.title = "Guardar captura"
         savePanel.prompt = "Guardar"
         savePanel.nameFieldStringValue = originalURL.lastPathComponent
-        savePanel.directoryURL = originalURL.deletingLastPathComponent()
+        if let savedPath = UserDefaults.standard.string(forKey: lastSaveAsDirectoryKey),
+           FileManager.default.fileExists(atPath: savedPath) {
+            savePanel.directoryURL = URL(fileURLWithPath: savedPath, isDirectory: true)
+        } else {
+            savePanel.directoryURL = originalURL.deletingLastPathComponent()
+        }
         savePanel.allowedContentTypes = [.png]
         savePanel.canCreateDirectories = true
         savePanel.isExtensionHidden = false
@@ -380,6 +386,10 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             guard response == .OK, let self, let destination = savePanel.url else {
                 return
             }
+            UserDefaults.standard.set(
+                destination.deletingLastPathComponent().path,
+                forKey: lastSaveAsDirectoryKey
+            )
 
             do {
                 if FileManager.default.fileExists(atPath: destination.path) {
