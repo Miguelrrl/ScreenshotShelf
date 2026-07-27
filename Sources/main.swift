@@ -53,6 +53,7 @@ private func uniqueDestination(_ requested: URL) -> URL {
 
 final class HoverContainerView: NSView {
     var controls: [NSView] = []
+    var onMouseEntered: (() -> Void)?
     private var tracking: NSTrackingArea?
 
     override func updateTrackingAreas() {
@@ -68,6 +69,7 @@ final class HoverContainerView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        onMouseEntered?()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.14
             controls.forEach { $0.animator().alphaValue = 1 }
@@ -114,6 +116,8 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     let originalURL: URL
     var onFinished: ((ThumbnailController) -> Void)?
     private var dragStarted = false
+    private weak var previewImageView: NSImageView?
+    private var lastImageModificationDate: Date?
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -158,6 +162,18 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         return button
     }
 
+    private func makeIconButton(symbolName: String, action: Selector) -> NSButton {
+        let button = makePill(title: "", action: action)
+        button.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: "Editar captura"
+        )
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .white
+        button.layer?.cornerRadius = 15
+        return button
+    }
+
     private func buildInterface() {
         guard let panel = window as? NSPanel else { return }
         let root = HoverContainerView(frame: NSRect(origin: .zero, size: panelSize))
@@ -174,6 +190,9 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         imageView.layer?.cornerRadius = 9
         imageView.layer?.masksToBounds = true
         imageView.beginDrag = { [weak self] event in self?.startDragging(event) }
+        previewImageView = imageView
+        lastImageModificationDate = modificationDate()
+        root.onMouseEntered = { [weak self] in self?.refreshPreviewIfNeeded() }
         root.addSubview(imageView)
 
         let copy = makePill(title: "⧉  Copiar", action: #selector(copyCapture))
@@ -190,7 +209,11 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         close.layer?.cornerRadius = 15
         root.addSubview(close)
 
-        root.controls = [copy, save, close]
+        let edit = makeIconButton(symbolName: "pencil", action: #selector(editCapture))
+        edit.frame = NSRect(x: 155, y: 112, width: 30, height: 30)
+        root.addSubview(edit)
+
+        root.controls = [copy, save, close, edit]
         root.controls.forEach { $0.alphaValue = 0 }
         panel.contentView = root
     }
@@ -225,6 +248,46 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func discardCapture() {
         finish(deletePending: true)
+    }
+
+    @objc private func editCapture() {
+        guard FileManager.default.fileExists(atPath: stagedURL.path) else {
+            NSSound.beep()
+            return
+        }
+
+        guard let previewURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.apple.Preview"
+        ) else {
+            NSWorkspace.shared.open(stagedURL)
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(
+            [stagedURL],
+            withApplicationAt: previewURL,
+            configuration: configuration
+        ) { _, error in
+            if error != nil {
+                DispatchQueue.main.async { NSSound.beep() }
+            }
+        }
+    }
+
+    private func modificationDate() -> Date? {
+        try? stagedURL.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
+    }
+
+    private func refreshPreviewIfNeeded() {
+        let currentDate = modificationDate()
+        guard currentDate != lastImageModificationDate,
+              let data = try? Data(contentsOf: stagedURL, options: .uncached),
+              let image = NSImage(data: data) else { return }
+        previewImageView?.image = image
+        lastImageModificationDate = currentDate
     }
 
     private func startDragging(_ event: NSEvent) {
