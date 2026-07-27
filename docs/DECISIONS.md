@@ -10,6 +10,16 @@ ser origen de drag and drop nativo. AppKit sí ofrece `NSDraggingSource`.
 La app conserva los atajos y la interfaz nativa de macOS. Sólo administra el PNG
 después de que macOS lo crea.
 
+La miniatura flotante nativa permanece desactivada incluso al cerrar
+ScreenshotShelf. Esto evita que reaparezca durante reinicios o actualizaciones.
+Para restaurarla manualmente:
+
+```bash
+defaults write com.apple.screencapture show-thumbnail -bool true
+killall Screenshot
+killall SystemUIServer
+```
+
 ## Almacenamiento temporal
 
 El PNG se mueve a `Application Support` para que:

@@ -32,6 +32,8 @@ private func setNativeThumbnail(enabled: Bool) {
     _ = run("/usr/bin/defaults", [
         "write", "com.apple.screencapture", "show-thumbnail", "-bool", enabled ? "true" : "false"
     ])
+    // Screenshot.app may keep the preference cached between captures.
+    _ = run("/usr/bin/killall", ["Screenshot"])
     _ = run("/usr/bin/killall", ["SystemUIServer"])
 }
 
@@ -298,7 +300,6 @@ final class ScreenshotManager {
     func stop() {
         timer?.invalidate()
         timer = nil
-        setNativeThumbnail(enabled: true)
     }
 
     private func recoverPendingFiles() {
