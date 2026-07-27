@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="420" viewBox="0 0 660 420">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a1022"/>
+      <stop offset="0.55" stop-color="#11172c"/>
+      <stop offset="1" stop-color="#251444"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#45a4ff"/>
+      <stop offset="1" stop-color="#9b67ff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="660" height="420" fill="url(#bg)"/>
+  <circle cx="110" cy="60" r="150" fill="#2578ff" opacity="0.08"/>
+  <circle cx="590" cy="390" r="190" fill="#a24dff" opacity="0.09"/>
+  <text x="330" y="61" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="25" font-weight="650" text-anchor="middle">Instalar ScreenshotShelf</text>
+  <text x="330" y="91" fill="#aeb8d5" font-family="-apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="14" text-anchor="middle">Arrastra la app a la carpeta Aplicaciones</text>
+  <path d="M265 212 H382" stroke="url(#arrow)" stroke-width="8" stroke-linecap="round"
+        filter="url(#glow)"/>
+  <path d="M370 195 L393 212 L370 229" fill="none" stroke="#9b67ff"
+        stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <text x="330" y="365" fill="#7f8aaa" font-family="-apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="12" text-anchor="middle">Después ábrela desde Aplicaciones</text>
+</svg>
