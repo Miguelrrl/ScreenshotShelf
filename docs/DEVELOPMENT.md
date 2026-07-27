@@ -72,6 +72,13 @@ No ejecute simultáneamente el módulo `screenshot-thumb.lua` de Hammerspoon.
 8. Un drop cancelado conserva la miniatura.
 9. Cambiar de Space sin captura no deja una imagen fantasma.
 10. Reiniciar la app recupera archivos pendientes.
+11. Guardar crea el archivo en `~/Pictures/ScreenshotShelf`.
+12. El archivo guardado contiene fecha en el nombre y la etiqueta Finder
+    `ScreenshotShelf`.
+
+Para dibujar o recortar en Preview, pulse **Mostrar barra de herramientas de
+Marcación**. Apple no ofrece una API pública para mostrar esa barra desde
+ScreenshotShelf.
 
 ## Diagnóstico
 

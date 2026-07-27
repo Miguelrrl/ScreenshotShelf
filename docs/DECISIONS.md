@@ -29,6 +29,23 @@ El PNG se mueve a `Application Support` para que:
 - Copiar no deje un archivo no deseado.
 - Drag and drop pueda entregar una URL de archivo real.
 
+## Carpeta y nombres administrados
+
+ScreenshotShelf configura como destino:
+
+```text
+~/Pictures/ScreenshotShelf
+```
+
+Los archivos guardados usan el patrón:
+
+```text
+ScreenshotShelf YYYY-MM-DD at HH.mm.ss.png
+```
+
+También reciben la etiqueta Finder `ScreenshotShelf`. Esto mantiene el
+Escritorio limpio y permite encontrarlos por nombre, fecha o etiqueta.
+
 ## Paneles separados por Space
 
 Se retiró `canJoinAllSpaces` después de detectar sesiones de arrastre fantasma al

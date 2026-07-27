@@ -29,6 +29,25 @@ private func screenshotDirectory() -> URL {
     return FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
 }
 
+private func managedScreenshotDirectory() -> URL {
+    let pictures = FileManager.default.urls(
+        for: .picturesDirectory,
+        in: .userDomainMask
+    ).first!
+    return pictures.appendingPathComponent(appName, isDirectory: true)
+}
+
+private func configureScreenshotDirectory() {
+    let directory = managedScreenshotDirectory()
+    try? FileManager.default.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true
+    )
+    _ = run("/usr/bin/defaults", [
+        "write", "com.apple.screencapture", "location", directory.path
+    ])
+}
+
 private func setNativeThumbnail(enabled: Bool) {
     _ = run("/usr/bin/defaults", [
         "write", "com.apple.screencapture", "show-thumbnail", "-bool", enabled ? "true" : "false"
@@ -50,6 +69,29 @@ private func uniqueDestination(_ requested: URL) -> URL {
         if !FileManager.default.fileExists(atPath: candidate.path) { return candidate }
         counter += 1
     }
+}
+
+private func datedScreenshotDestination() -> URL {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+    let name = "ScreenshotShelf \(formatter.string(from: Date())).png"
+    return uniqueDestination(screenshotDirectory().appendingPathComponent(name))
+}
+
+private func tagSavedFile(_ url: URL) {
+    try? (url as NSURL).setResourceValue(
+        [appName],
+        forKey: URLResourceKey.tagNamesKey
+    )
+}
+
+private func filenameWithoutUUIDPrefix(_ name: String) -> String {
+    guard name.count > 37 else { return name }
+    let uuidEnd = name.index(name.startIndex, offsetBy: 36)
+    let prefix = String(name[..<uuidEnd])
+    guard UUID(uuidString: prefix) != nil, name[uuidEnd] == "-" else { return name }
+    return String(name[name.index(after: uuidEnd)...])
 }
 
 final class HoverContainerView: NSView {
@@ -220,6 +262,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             action: #selector(editCapture)
         )
         edit.frame = NSRect(x: 155, y: 112, width: 30, height: 30)
+        edit.toolTip = "Editar en Preview; activa Marcación para dibujar o recortar"
         root.addSubview(edit)
 
         let saveAs = makeIconButton(
@@ -256,7 +299,9 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func saveCapture() {
         do {
-            try FileManager.default.moveItem(at: stagedURL, to: uniqueDestination(originalURL))
+            let destination = uniqueDestination(originalURL)
+            try FileManager.default.moveItem(at: stagedURL, to: destination)
+            tagSavedFile(destination)
             finish(deletePending: false)
         } catch {
             NSSound.beep()
@@ -296,6 +341,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
                         to: destination
                     )
                 }
+                tagSavedFile(destination)
                 self.finish(deletePending: false)
             } catch {
                 NSSound.beep()
@@ -410,6 +456,7 @@ final class ScreenshotManager {
     }
 
     func start() {
+        configureScreenshotDirectory()
         setNativeThumbnail(enabled: false)
         NSLog("%@: observando %@", appName, screenshotDirectory().path)
         timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
@@ -430,9 +477,12 @@ final class ScreenshotManager {
         )) ?? []
         for file in files {
             let name = file.lastPathComponent
-            let recoveredName = name.split(separator: "-", maxSplits: 1).dropFirst().first.map(String.init) ?? name
+            let recoveredName = filenameWithoutUUIDPrefix(name)
             let target = uniqueDestination(destination.appendingPathComponent(recoveredName))
-            try? FileManager.default.moveItem(at: file, to: target)
+            if (try? FileManager.default.moveItem(at: file, to: target)) != nil {
+                seen.insert(target.path)
+                tagSavedFile(target)
+            }
         }
     }
 
@@ -471,12 +521,13 @@ final class ScreenshotManager {
     private func stage(_ source: URL) {
         processing.remove(source.path)
         guard FileManager.default.fileExists(atPath: source.path) else { return }
+        let original = datedScreenshotDestination()
         let staged = pendingDirectory
-            .appendingPathComponent(UUID().uuidString + "-" + source.lastPathComponent)
+            .appendingPathComponent(UUID().uuidString + "-" + original.lastPathComponent)
         do {
             try FileManager.default.moveItem(at: source, to: staged)
             seen.insert(source.path)
-            show(staged: staged, original: source)
+            show(staged: staged, original: original)
         } catch {
             // The file may still be finishing; a later scan will retry it.
             NSLog("%@: no se pudo mover %@: %@", appName, source.path, error.localizedDescription)
