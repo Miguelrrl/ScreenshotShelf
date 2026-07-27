@@ -3,6 +3,16 @@
     <channel>
         <title>ScreenshotShelf</title>
         <item>
+            <title>0.3.0</title>
+            <pubDate>Mon, 27 Jul 2026 21:45:38 +0000</pubDate>
+            <link>https://github.com/Miguelrrl/ScreenshotShelf</link>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://miguelrrl.github.io/ScreenshotShelf/ScreenshotShelf-0.3.0.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/Miguelrrl/ScreenshotShelf/releases/download/v0.3.0/ScreenshotShelf-0.3.0.dmg" length="3639114" type="application/octet-stream" sparkle:edSignature="h+bKobQc5/gWwwDwynpv9uX/6p9YhbnAlIC90BmRTYlwvH7PpiHG7tgqEuo66ouPQ9XJBhQCRQzBbH3MgdfXDw=="/>
+        </item>
+        <item>
             <title>0.2.4</title>
             <pubDate>Mon, 27 Jul 2026 21:26:05 +0000</pubDate>
             <link>https://github.com/Miguelrrl/ScreenshotShelf</link>
@@ -41,16 +51,6 @@
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://miguelrrl.github.io/ScreenshotShelf/ScreenshotShelf-0.2.1.md</sparkle:releaseNotesLink>
             <enclosure url="https://github.com/Miguelrrl/ScreenshotShelf/releases/download/v0.2.1/ScreenshotShelf-0.2.1.dmg" length="3725869" type="application/octet-stream" sparkle:edSignature="mj22l8kDguD1c8SXmtfHIY4cau3Am1iFu2XBJpeSRaLEe6R58pZAfPWaaIRDxjZ/TxAq/98x1wGAgr8hzU4pBw=="/>
-        </item>
-        <item>
-            <title>0.2.0</title>
-            <pubDate>Mon, 27 Jul 2026 20:38:05 +0000</pubDate>
-            <link>https://github.com/Miguelrrl/ScreenshotShelf</link>
-            <sparkle:version>5</sparkle:version>
-            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://miguelrrl.github.io/ScreenshotShelf/ScreenshotShelf-0.2.0.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/Miguelrrl/ScreenshotShelf/releases/download/v0.2.0/ScreenshotShelf-0.2.0.dmg" length="3725913" type="application/octet-stream" sparkle:edSignature="ubNy8VkLPRf39ygRJXbdyqicRAzg2et8ex6JfeNFZxU1T4pZdhNT7DXH8MLFWZDA9knFzK0hgqlnCtkbhWKkCg=="/>
         </item>
     </channel>
 </rss>
