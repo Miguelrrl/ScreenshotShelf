@@ -18,6 +18,12 @@ thumbnail with a persistent shelf.
 - macOS 13 or later
 - Xcode with the macOS SDK
 
+## Documentation
+
+Start with [`docs/HANDOFF.md`](docs/HANDOFF.md) when continuing the project in a
+new development session. The complete documentation index is available at
+[`docs/README.md`](docs/README.md).
+
 ## Build
 
 ```bash
