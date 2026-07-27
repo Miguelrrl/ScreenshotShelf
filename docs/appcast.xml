@@ -3,6 +3,16 @@
     <channel>
         <title>ScreenshotShelf</title>
         <item>
+            <title>0.2.2</title>
+            <pubDate>Mon, 27 Jul 2026 21:12:40 +0000</pubDate>
+            <link>https://github.com/Miguelrrl/ScreenshotShelf</link>
+            <sparkle:version>7</sparkle:version>
+            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://miguelrrl.github.io/ScreenshotShelf/ScreenshotShelf-0.2.2.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/Miguelrrl/ScreenshotShelf/releases/download/v0.2.2/ScreenshotShelf-0.2.2.dmg" length="3357224" type="application/octet-stream" sparkle:edSignature="s0QETPPrdR9HLupBqNjmRjZbg4bqXD0Afp/9S5G18mC3MMeKYLGnD0bmTzF8eyKHrYlD0a916aLXS5hwDL/ICA=="/>
+        </item>
+        <item>
             <title>0.2.1</title>
             <pubDate>Mon, 27 Jul 2026 21:07:36 +0000</pubDate>
             <link>https://github.com/Miguelrrl/ScreenshotShelf</link>
