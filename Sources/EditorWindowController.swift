@@ -12,6 +12,31 @@ private enum EditTool: Int, CaseIterable {
         case .crop: return "Recortar"
         }
     }
+    var symbol: String {
+        switch self {
+        case .pen: return "pencil.tip"
+        case .arrow: return "arrow.up.right"
+        case .rectangle: return "rectangle"
+        case .ellipse: return "circle"
+        case .text: return "textformat"
+        case .crop: return "crop"
+        }
+    }
+}
+
+private final class CenteringClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var constrained = super.constrainBoundsRect(proposedBounds)
+        guard let documentView else { return constrained }
+        let documentFrame = documentView.frame
+        if documentFrame.width < constrained.width {
+            constrained.origin.x = documentFrame.midX - constrained.width / 2
+        }
+        if documentFrame.height < constrained.height {
+            constrained.origin.y = documentFrame.midY - constrained.height / 2
+        }
+        return constrained
+    }
 }
 
 private struct Stroke { var points: [NSPoint]; var color: NSColor; var width: CGFloat }
@@ -214,14 +239,21 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         guard let content = window?.contentView else { return }
         let bar = NSVisualEffectView(); bar.material = .headerView
         let scroll = NSScrollView(); scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true
+        scroll.contentView = CenteringClipView()
         scroll.allowsMagnification = true; scroll.minMagnification = 0.15; scroll.maxMagnification = 4
         scroll.documentView = canvas; scroll.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1)
         [bar, scroll].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; content.addSubview($0) }
         let stack = NSStackView(); stack.orientation = .horizontal; stack.alignment = .centerY; stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(stack)
         EditTool.allCases.forEach { tool in
-            let b = NSButton(title: tool.title, target: self, action: #selector(selectTool(_:)))
+            let b = NSButton(title: "", target: self, action: #selector(selectTool(_:)))
+            b.image = NSImage(systemSymbolName: tool.symbol, accessibilityDescription: tool.title)
+            b.imagePosition = .imageOnly
+            b.toolTip = tool.title
+            b.setAccessibilityLabel(tool.title)
             b.tag = tool.rawValue; b.setButtonType(.toggle); b.bezelStyle = .texturedRounded
+            b.widthAnchor.constraint(equalToConstant: 38).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 32).isActive = true
             b.state = tool == .pen ? .on : .off; stack.addArrangedSubview(b); toolButtons.append(b)
         }
         let color = NSColorWell(); color.color = canvas.color; color.target = self
