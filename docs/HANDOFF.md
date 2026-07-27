@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.3.2`
-- Build en desarrollo: `12`
-- Último tag publicado antes de este cambio: `v0.3.1`
+- Versión en desarrollo: `0.4.0`
+- Build en desarrollo: `13`
+- Último tag publicado antes de este cambio: `v0.3.2`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -28,6 +28,9 @@
 - Las herramientas usan iconos SF Symbols con nombre accesible y tooltip.
 - La esquina inferior derecha de la miniatura incluye un control para moverla.
 - Las miniaturas reubicadas manualmente conservan su posición durante el apilado.
+- El editor ofrece zoom visible, ajuste a ventana y zoom mediante trackpad.
+- El texto insertado puede seleccionarse y moverse arrastrándolo.
+- OCR local con Vision detecta texto de la captura y lo copia al portapapeles.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.

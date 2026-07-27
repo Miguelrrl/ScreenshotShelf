@@ -1,4 +1,5 @@
 import AppKit
+import Vision
 
 private enum EditTool: Int, CaseIterable {
     case pen, arrow, rectangle, ellipse, text, crop
@@ -59,6 +60,9 @@ private final class EditorCanvas: NSView {
     private var state = CanvasState()
     private var undoStack: [CanvasState] = [], redoStack: [CanvasState] = []
     private var start: NSPoint?, current: NSPoint?, activeStroke: Stroke?
+    private var movingLabel: Int?
+    private var movingOffset = NSPoint.zero
+    private var selectedLabel: Int?
 
     init(image: NSImage) {
         self.image = image
@@ -102,17 +106,47 @@ private final class EditorCanvas: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let p = point(event)
-        if tool == .text { addText(at: p); return }
+        if tool == .text {
+            if let index = labelIndex(at: p) {
+                checkpoint()
+                movingLabel = index
+                selectedLabel = index
+                movingOffset = NSPoint(
+                    x: p.x - state.labels[index].point.x,
+                    y: p.y - state.labels[index].point.y
+                )
+                needsDisplay = true
+            } else {
+                selectedLabel = nil
+                addText(at: p)
+            }
+            return
+        }
+        selectedLabel = nil
         start = p; current = p
         if tool == .pen { activeStroke = Stroke(points: [p], color: color, width: width) }
         needsDisplay = true
     }
     override func mouseDragged(with event: NSEvent) {
+        if let index = movingLabel {
+            let p = point(event)
+            state.labels[index].point = NSPoint(
+                x: p.x - movingOffset.x,
+                y: p.y - movingOffset.y
+            )
+            needsDisplay = true
+            return
+        }
         current = point(event)
         if tool == .pen, let p = current { activeStroke?.points.append(p) }
         needsDisplay = true
     }
     override func mouseUp(with event: NSEvent) {
+        if movingLabel != nil {
+            movingLabel = nil
+            onHistoryChange?()
+            return
+        }
         guard let a = start else { return }
         let b = point(event)
         if hypot(b.x - a.x, b.y - a.y) >= 2 {
@@ -138,26 +172,45 @@ private final class EditorCanvas: NSView {
               !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         checkpoint()
         state.labels.append(Label(point: point, text: field.stringValue, color: color, size: max(16, width * 4)))
+        selectedLabel = state.labels.indices.last
         changed()
+    }
+    private func labelAttributes(_ label: Label) -> [NSAttributedString.Key: Any] {
+        [
+            .font: NSFont.systemFont(ofSize: label.size, weight: .semibold),
+            .foregroundColor: label.color,
+            .strokeColor: NSColor.black.withAlphaComponent(0.45),
+            .strokeWidth: -2
+        ]
+    }
+    private func labelRect(_ label: Label) -> NSRect {
+        let size = (label.text as NSString).size(withAttributes: labelAttributes(label))
+        return NSRect(origin: label.point, size: size).insetBy(dx: -8, dy: -6)
+    }
+    private func labelIndex(at point: NSPoint) -> Int? {
+        state.labels.indices.reversed().first { labelRect(state.labels[$0]).contains(point) }
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        image.draw(in: bounds); drawAnnotations()
+        image.draw(in: bounds); drawAnnotations(showSelection: true)
         if let activeStroke { draw(stroke: activeStroke) }
         if let a = start, let b = current, tool != .pen, tool != .text {
             if tool == .crop { cropOverlay(rect(a, b)) }
             else { draw(shape: Shape(tool: tool, start: a, end: b, color: color, width: width)) }
         } else if let crop = state.crop { cropOverlay(crop) }
     }
-    private func drawAnnotations() {
+    private func drawAnnotations(showSelection: Bool) {
         state.strokes.forEach { draw(stroke: $0) }
         state.shapes.forEach { draw(shape: $0) }
-        state.labels.forEach {
-            ($0.text as NSString).draw(at: $0.point, withAttributes: [
-                .font: NSFont.systemFont(ofSize: $0.size, weight: .semibold),
-                .foregroundColor: $0.color,
-                .strokeColor: NSColor.black.withAlphaComponent(0.45), .strokeWidth: -2
-            ])
+        for (index, label) in state.labels.enumerated() {
+            (label.text as NSString).draw(at: label.point, withAttributes: labelAttributes(label))
+            if showSelection, index == selectedLabel {
+                let selection = NSBezierPath(roundedRect: labelRect(label), xRadius: 4, yRadius: 4)
+                selection.lineWidth = 1.5
+                selection.setLineDash([5, 3], count: 2, phase: 0)
+                NSColor.controlAccentColor.setStroke()
+                selection.stroke()
+            }
         }
     }
     private func draw(stroke: Stroke) {
@@ -206,7 +259,7 @@ private final class EditorCanvas: NSView {
         let transform = NSAffineTransform()
         transform.translateX(by: -output.minX, yBy: -output.minY)
         transform.concat()
-        image.draw(in: bounds); drawAnnotations()
+        image.draw(in: bounds); drawAnnotations(showSelection: false)
         NSGraphicsContext.restoreGraphicsState()
         return bitmap.representation(using: .png, properties: [:])
     }
@@ -217,6 +270,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private let canvas: EditorCanvas
     private var toolButtons: [NSButton] = []
     private var undoButton: NSButton!, redoButton: NSButton!
+    private weak var scrollView: NSScrollView?
     var onApply: (() -> Void)?
     var onClose: (() -> Void)?
 
@@ -229,7 +283,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "Editar captura — ScreenshotShelf"; window.minSize = NSSize(width: 800, height: 480)
+        window.title = "Editar captura — ScreenshotShelf"; window.minSize = NSSize(width: 900, height: 480)
         window.isReleasedWhenClosed = false; window.center()
         super.init(window: window); window.delegate = self; build()
     }
@@ -242,6 +296,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         scroll.contentView = CenteringClipView()
         scroll.allowsMagnification = true; scroll.minMagnification = 0.15; scroll.maxMagnification = 4
         scroll.documentView = canvas; scroll.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1)
+        scrollView = scroll
         [bar, scroll].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; content.addSubview($0) }
         let stack = NSStackView(); stack.orientation = .horizontal; stack.alignment = .centerY; stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(stack)
@@ -260,6 +315,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         color.action = #selector(changeColor(_:)); stack.addArrangedSubview(color)
         let slider = NSSlider(value: 5, minValue: 2, maxValue: 18, target: self, action: #selector(changeWidth(_:)))
         slider.widthAnchor.constraint(equalToConstant: 75).isActive = true; stack.addArrangedSubview(slider)
+        stack.addArrangedSubview(iconButton("text.viewfinder", "Copiar texto de la imagen", #selector(copyRecognizedText)))
+        stack.addArrangedSubview(iconButton("minus.magnifyingglass", "Alejar", #selector(zoomOut)))
+        stack.addArrangedSubview(iconButton("plus.magnifyingglass", "Acercar", #selector(zoomIn)))
+        stack.addArrangedSubview(iconButton("arrow.down.right.and.arrow.up.left", "Ajustar a la ventana", #selector(zoomToFit)))
         undoButton = makeButton("↶", #selector(undo)); redoButton = makeButton("↷", #selector(redo))
         stack.addArrangedSubview(undoButton); stack.addArrangedSubview(redoButton)
         stack.addArrangedSubview(makeButton("Restablecer", #selector(reset)))
@@ -276,13 +335,21 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor)
         ])
         canvas.onHistoryChange = { [weak self] in self?.updateHistory() }; updateHistory()
-        DispatchQueue.main.async {
-            scroll.magnification = min(scroll.contentSize.width / max(self.canvas.image.size.width, 1),
-                                       scroll.contentSize.height / max(self.canvas.image.size.height, 1), 1)
-        }
+        DispatchQueue.main.async { self.fitImage() }
     }
     private func makeButton(_ title: String, _ action: Selector) -> NSButton {
         let b = NSButton(title: title, target: self, action: action); b.bezelStyle = .rounded; return b
+    }
+    private func iconButton(_ symbol: String, _ label: String, _ action: Selector) -> NSButton {
+        let button = NSButton(title: "", target: self, action: action)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .texturedRounded
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        button.widthAnchor.constraint(equalToConstant: 36).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        return button
     }
     @objc private func selectTool(_ sender: NSButton) {
         guard let tool = EditTool(rawValue: sender.tag) else { return }
@@ -290,6 +357,71 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     }
     @objc private func changeColor(_ sender: NSColorWell) { canvas.color = sender.color }
     @objc private func changeWidth(_ sender: NSSlider) { canvas.width = CGFloat(sender.doubleValue) }
+    @objc private func zoomIn() {
+        guard let scrollView else { return }
+        scrollView.setMagnification(min(scrollView.magnification * 1.25, scrollView.maxMagnification), centeredAt: visibleCenter)
+    }
+    @objc private func zoomOut() {
+        guard let scrollView else { return }
+        scrollView.setMagnification(max(scrollView.magnification / 1.25, scrollView.minMagnification), centeredAt: visibleCenter)
+    }
+    @objc private func zoomToFit() { fitImage() }
+    private var visibleCenter: NSPoint {
+        guard let scrollView else { return .zero }
+        return NSPoint(x: scrollView.documentVisibleRect.midX, y: scrollView.documentVisibleRect.midY)
+    }
+    private func fitImage() {
+        guard let scrollView else { return }
+        scrollView.magnification = min(
+            scrollView.contentSize.width / max(canvas.image.size.width, 1),
+            scrollView.contentSize.height / max(canvas.image.size.height, 1),
+            1
+        )
+    }
+    @objc private func copyRecognizedText() {
+        guard let cgImage = canvas.image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            NSSound.beep()
+            return
+        }
+        let request = VNRecognizeTextRequest { request, error in
+            let text = (request.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n") ?? ""
+            DispatchQueue.main.async {
+                guard error == nil, !text.isEmpty else {
+                    self.showOCRResult("No se encontró texto legible.", copied: false)
+                    return
+                }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+                self.showOCRResult(text, copied: true)
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? VNImageRequestHandler(cgImage: cgImage).perform([request])
+        }
+    }
+    private func showOCRResult(_ text: String, copied: Bool) {
+        let alert = NSAlert()
+        alert.messageText = copied ? "Texto copiado" : "Reconocimiento de texto"
+        alert.informativeText = copied
+            ? "El texto detectado se copió al portapapeles."
+            : text
+        alert.addButton(withTitle: "Aceptar")
+        if copied {
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 180))
+            scroll.hasVerticalScroller = true
+            let textView = NSTextView(frame: scroll.bounds)
+            textView.string = text
+            textView.isEditable = false
+            textView.isSelectable = true
+            scroll.documentView = textView
+            alert.accessoryView = scroll
+        }
+        alert.runModal()
+    }
     @objc private func undo() { canvas.undo() }
     @objc private func redo() { canvas.redo() }
     @objc private func reset() { canvas.reset() }
