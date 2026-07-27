@@ -154,6 +154,33 @@ final class DragImageView: NSImageView {
     }
 }
 
+final class WindowMoveButton: NSButton {
+    var onMoved: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        let initialMouse = NSEvent.mouseLocation
+        let initialOrigin = window.frame.origin
+        var moved = false
+
+        while let next = window.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            if next.type == .leftMouseUp { break }
+            let mouse = NSEvent.mouseLocation
+            window.setFrameOrigin(NSPoint(
+                x: initialOrigin.x + mouse.x - initialMouse.x,
+                y: initialOrigin.y + mouse.y - initialMouse.y
+            ))
+            moved = true
+        }
+        if moved { onMoved?() }
+    }
+}
+
 final class ThumbnailController: NSWindowController, NSDraggingSource {
     let stagedURL: URL
     let originalURL: URL
@@ -162,6 +189,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private weak var previewImageView: NSImageView?
     private var lastImageModificationDate: Date?
     private var editorController: EditorWindowController?
+    private(set) var isManuallyPositioned = false
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -274,7 +302,30 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         saveAs.frame = NSRect(x: 7, y: 7, width: 30, height: 30)
         root.addSubview(saveAs)
 
-        root.controls = [copy, save, close, edit, saveAs]
+        let move = WindowMoveButton(
+            title: "",
+            target: nil,
+            action: nil
+        )
+        move.isBordered = false
+        move.image = NSImage(
+            systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right",
+            accessibilityDescription: "Mover miniatura"
+        )
+        move.imagePosition = .imageOnly
+        move.contentTintColor = .white
+        move.toolTip = "Arrastrar para mover la miniatura"
+        move.setAccessibilityLabel("Mover miniatura")
+        move.wantsLayer = true
+        move.layer?.cornerRadius = 15
+        move.layer?.borderWidth = 1
+        move.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+        move.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.68).cgColor
+        move.frame = NSRect(x: 155, y: 7, width: 30, height: 30)
+        move.onMoved = { [weak self] in self?.isManuallyPositioned = true }
+        root.addSubview(move)
+
+        root.controls = [copy, save, close, edit, saveAs, move]
         root.controls.forEach { $0.alphaValue = 0 }
         panel.contentView = root
     }
@@ -554,7 +605,7 @@ final class ScreenshotManager {
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
         var y = frame.minY + edgeMargin
-        for panel in panels {
+        for panel in panels where !panel.isManuallyPositioned {
             panel.show(at: NSPoint(x: frame.minX + 24, y: y))
             y += panelSize.height + panelGap
         }
