@@ -33,8 +33,12 @@ jobs:
           ARCHIVE="ScreenshotShelf-${VERSION}.dmg"
           mkdir -p updates docs
           cp dist/ScreenshotShelf.dmg "updates/${ARCHIVE}"
-          printf '# ScreenshotShelf %s\n\nSee the GitHub release for changes.\n' "$VERSION" \
-            > "updates/ScreenshotShelf-${VERSION}.md"
+          if [ -f "docs/ScreenshotShelf-${VERSION}.md" ]; then
+            cp "docs/ScreenshotShelf-${VERSION}.md" "updates/ScreenshotShelf-${VERSION}.md"
+          else
+            printf '# ScreenshotShelf %s\n\nSee the GitHub release for changes.\n' "$VERSION" \
+              > "updates/ScreenshotShelf-${VERSION}.md"
+          fi
 
           if curl --fail --silent --show-error \
             "https://miguelrrl.github.io/ScreenshotShelf/appcast.xml" \

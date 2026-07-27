@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.2.4`
-- Build en desarrollo: `9`
-- Último tag publicado antes de este cambio: `v0.2.3`
+- Versión en desarrollo: `0.3.0`
+- Build en desarrollo: `10`
+- Último tag publicado antes de este cambio: `v0.2.4`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -22,7 +22,10 @@
 - Mueve capturas nuevas a almacenamiento temporal.
 - Muestra una miniatura persistente en la pantalla del cursor.
 - Permite copiar, guardar, descartar y hacer drag and drop.
-- Permite abrir la captura pendiente en Preview mediante el botón de lápiz.
+- Incluye editor nativo con lápiz, flecha, rectángulo, círculo, texto y recorte.
+- El editor permite elegir color y grosor, deshacer, rehacer y restablecer.
+- `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
+  conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.
 - Configura `~/Pictures/ScreenshotShelf` como destino de capturas.
 - Usa nombres `ScreenshotShelf <fecha> at <hora>.png` y etiqueta Finder.
@@ -61,18 +64,19 @@ corriendo; ambos procesos competirían por el mismo PNG.
   - En el Llavero local, cuenta `ScreenshotShelf`.
   - En el secreto `SPARKLE_PRIVATE_KEY` del repositorio.
 - La clave privada nunca debe incluirse en Git.
-- La cuenta personal de GitHub no debe quedar autenticada después del trabajo si
-  se solicita acceso temporal.
+- La cuenta activa para este proyecto es `Miguelrrl`; conservarla autenticada
+  hasta que el propietario confirme que terminó el trabajo.
 
 ## Próxima validación recomendada
 
-Publicar `0.2.1` con un cambio pequeño y probar la actualización real desde una
-Mac que tenga `0.2.0` instalada en `/Applications`.
+Publicar `0.3.0` y probar la actualización real desde una Mac que tenga `0.2.4`
+instalada en `/Applications`.
 
 Validar:
 
-1. `Buscar actualizaciones…` detecta `0.2.1`.
+1. `Buscar actualizaciones…` detecta `0.3.0`.
 2. Sparkle descarga y verifica el DMG.
 3. La app se reemplaza y reinicia.
 4. Gatekeeper no impide el reemplazo ad hoc.
-5. Captura, copiar, guardar y drag and drop siguen funcionando.
+5. Todas las herramientas del editor producen el PNG esperado.
+6. Captura, copiar, guardar y drag and drop siguen funcionando.

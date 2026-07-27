@@ -26,6 +26,7 @@ Controla un `NSPanel` flotante por captura:
 - Copiar al portapapeles.
 - Guardar en el destino original.
 - Descartar.
+- Abrir el editor nativo y refrescar la miniatura cuando se aplican cambios.
 - Drag and drop mediante `NSDraggingSource`.
 
 La sesión de arrastre sólo comienza si:
@@ -38,6 +39,15 @@ La sesión de arrastre sólo comienza si:
 
 Si el destino devuelve `.copy`, la miniatura se cierra y el archivo temporal se
 elimina después de una espera breve.
+
+### `EditorWindowController` y `EditorCanvas`
+
+- Presentan una ventana AppKit propia; Preview no forma parte del flujo.
+- Dibujan trazos, flechas, rectángulos, círculos y texto sobre el PNG.
+- Mantienen historial en memoria para deshacer y rehacer.
+- El recorte es no destructivo mientras la ventana permanece abierta.
+- Al pulsar `Aplicar`, renderizan las anotaciones y el recorte a PNG y reemplazan
+  atómicamente el archivo de `Pending`.
 
 ### `AppDelegate`
 
@@ -67,7 +77,7 @@ Mueve PNG a Pending
       ↓
 ThumbnailController muestra NSPanel
       ↓
-Copiar / Guardar / X / Drag and drop
+Editar / Copiar / Guardar / X / Drag and drop
       ↓
 Cerrar panel y conservar o eliminar archivo
 ```

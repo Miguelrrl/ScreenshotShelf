@@ -161,6 +161,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private var dragStarted = false
     private weak var previewImageView: NSImageView?
     private var lastImageModificationDate: Date?
+    private var editorController: EditorWindowController?
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -262,7 +263,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             action: #selector(editCapture)
         )
         edit.frame = NSRect(x: 155, y: 112, width: 30, height: 30)
-        edit.toolTip = "Editar en Preview; activa Marcación para dibujar o recortar"
+        edit.toolTip = "Editar captura"
         root.addSubview(edit)
 
         let saveAs = makeIconButton(
@@ -359,24 +360,21 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             return
         }
 
-        guard let previewURL = NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: "com.apple.Preview"
-        ) else {
-            NSWorkspace.shared.open(stagedURL)
+        guard editorController == nil,
+              let editor = EditorWindowController(imageURL: stagedURL) else {
+            NSSound.beep()
             return
         }
-
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.open(
-            [stagedURL],
-            withApplicationAt: previewURL,
-            configuration: configuration
-        ) { _, error in
-            if error != nil {
-                DispatchQueue.main.async { NSSound.beep() }
-            }
+        editor.onApply = { [weak self] in
+            self?.lastImageModificationDate = nil
+            self?.refreshPreviewIfNeeded()
         }
+        editor.onClose = { [weak self, weak editor] in
+            guard let self, self.editorController === editor else { return }
+            self.editorController = nil
+        }
+        editorController = editor
+        editor.showEditor()
     }
 
     private func modificationDate() -> Date? {
@@ -431,6 +429,8 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     private func finish(deletePending: Bool) {
         dragStarted = false
+        editorController?.close()
+        editorController = nil
         if deletePending { try? FileManager.default.removeItem(at: stagedURL) }
         window?.close()
         onFinished?(self)

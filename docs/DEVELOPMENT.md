@@ -75,10 +75,11 @@ No ejecute simultáneamente el módulo `screenshot-thumb.lua` de Hammerspoon.
 11. Guardar crea el archivo en `~/Pictures/ScreenshotShelf`.
 12. El archivo guardado contiene fecha en el nombre y la etiqueta Finder
     `ScreenshotShelf`.
-
-Para dibujar o recortar en Preview, pulse **Mostrar barra de herramientas de
-Marcación**. Apple no ofrece una API pública para mostrar esa barra desde
-ScreenshotShelf.
+13. El lápiz abre el editor nativo.
+14. Lápiz, flecha, rectángulo, círculo y texto aparecen en el PNG aplicado.
+15. Recortar cambia las dimensiones de la captura.
+16. Deshacer, rehacer y restablecer actualizan correctamente el lienzo.
+17. Cancelar conserva el PNG original y Aplicar refresca la miniatura.
 
 ## Diagnóstico
 
