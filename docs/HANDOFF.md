@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.2.2`
-- Build en desarrollo: `7`
-- Último tag publicado antes de este cambio: `v0.2.1`
+- Versión en desarrollo: `0.2.3`
+- Build en desarrollo: `8`
+- Último tag publicado antes de este cambio: `v0.2.2`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -23,6 +23,7 @@
 - Muestra una miniatura persistente en la pantalla del cursor.
 - Permite copiar, guardar, descartar y hacer drag and drop.
 - Permite abrir la captura pendiente en Preview mediante el botón de lápiz.
+- Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.
 - Cierra la miniatura después de un drop aceptado.
 - Evita iniciar drag sin clic izquierdo y movimiento mínimo.
 - Los paneles no acompañan todos los Spaces.

@@ -1,5 +1,6 @@
 import AppKit
 import Sparkle
+import UniformTypeIdentifiers
 
 private let appName = "ScreenshotShelf"
 private let panelSize = NSSize(width: 192, height: 147)
@@ -162,11 +163,15 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         return button
     }
 
-    private func makeIconButton(symbolName: String, action: Selector) -> NSButton {
+    private func makeIconButton(
+        symbolName: String,
+        accessibilityDescription: String,
+        action: Selector
+    ) -> NSButton {
         let button = makePill(title: "", action: action)
         button.image = NSImage(
             systemSymbolName: symbolName,
-            accessibilityDescription: "Editar captura"
+            accessibilityDescription: accessibilityDescription
         )
         button.imagePosition = .imageOnly
         button.contentTintColor = .white
@@ -209,11 +214,23 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         close.layer?.cornerRadius = 15
         root.addSubview(close)
 
-        let edit = makeIconButton(symbolName: "pencil", action: #selector(editCapture))
+        let edit = makeIconButton(
+            symbolName: "pencil",
+            accessibilityDescription: "Editar captura",
+            action: #selector(editCapture)
+        )
         edit.frame = NSRect(x: 155, y: 112, width: 30, height: 30)
         root.addSubview(edit)
 
-        root.controls = [copy, save, close, edit]
+        let saveAs = makeIconButton(
+            symbolName: "externaldrive.fill",
+            accessibilityDescription: "Guardar como",
+            action: #selector(saveCaptureAs)
+        )
+        saveAs.frame = NSRect(x: 7, y: 7, width: 30, height: 30)
+        root.addSubview(saveAs)
+
+        root.controls = [copy, save, close, edit, saveAs]
         root.controls.forEach { $0.alphaValue = 0 }
         panel.contentView = root
     }
@@ -243,6 +260,46 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             finish(deletePending: false)
         } catch {
             NSSound.beep()
+        }
+    }
+
+    @objc private func saveCaptureAs() {
+        guard FileManager.default.fileExists(atPath: stagedURL.path) else {
+            NSSound.beep()
+            return
+        }
+
+        let savePanel = NSSavePanel()
+        savePanel.title = "Guardar captura"
+        savePanel.prompt = "Guardar"
+        savePanel.nameFieldStringValue = originalURL.lastPathComponent
+        savePanel.directoryURL = originalURL.deletingLastPathComponent()
+        savePanel.allowedContentTypes = [.png]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+
+        NSApp.activate(ignoringOtherApps: true)
+        savePanel.begin { [weak self] response in
+            guard response == .OK, let self, let destination = savePanel.url else {
+                return
+            }
+
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    _ = try FileManager.default.replaceItemAt(
+                        destination,
+                        withItemAt: self.stagedURL
+                    )
+                } else {
+                    try FileManager.default.moveItem(
+                        at: self.stagedURL,
+                        to: destination
+                    )
+                }
+                self.finish(deletePending: false)
+            } catch {
+                NSSound.beep()
+            }
         }
     }
 
