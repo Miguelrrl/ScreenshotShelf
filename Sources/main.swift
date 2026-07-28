@@ -7,6 +7,15 @@ private let panelSize = NSSize(width: 192, height: 147)
 private let edgeMargin: CGFloat = 64
 private let panelGap: CGFloat = 12
 private let lastSaveAsDirectoryKey = "LastSaveAsDirectory"
+let defaultScreenshotDirectoryKey = "DefaultScreenshotDirectory"
+let autoSaveEnabledKey = "AutoSaveEnabled"
+let autoSaveSecondsKey = "AutoSaveSeconds"
+
+extension Notification.Name {
+    static let screenshotShelfSettingsChanged = Notification.Name(
+        "ScreenshotShelfSettingsChanged"
+    )
+}
 
 @discardableResult
 private func run(_ executable: String, _ arguments: [String]) -> String {
@@ -21,7 +30,12 @@ private func run(_ executable: String, _ arguments: [String]) -> String {
     return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 }
 
-private func screenshotDirectory() -> URL {
+func screenshotDirectory() -> URL {
+    if let savedPath = UserDefaults.standard.string(
+        forKey: defaultScreenshotDirectoryKey
+    ), !savedPath.isEmpty {
+        return URL(fileURLWithPath: savedPath, isDirectory: true)
+    }
     let configured = run("/usr/bin/defaults", ["read", "com.apple.screencapture", "location"])
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !configured.isEmpty {
@@ -38,8 +52,14 @@ private func managedScreenshotDirectory() -> URL {
     return pictures.appendingPathComponent(appName, isDirectory: true)
 }
 
-private func configureScreenshotDirectory() {
-    let directory = managedScreenshotDirectory()
+func configureScreenshotDirectory() {
+    let directory: URL
+    if UserDefaults.standard.string(forKey: defaultScreenshotDirectoryKey) == nil {
+        directory = managedScreenshotDirectory()
+        UserDefaults.standard.set(directory.path, forKey: defaultScreenshotDirectoryKey)
+    } else {
+        directory = screenshotDirectory()
+    }
     try? FileManager.default.createDirectory(
         at: directory,
         withIntermediateDirectories: true
@@ -47,6 +67,11 @@ private func configureScreenshotDirectory() {
     _ = run("/usr/bin/defaults", [
         "write", "com.apple.screencapture", "location", directory.path
     ])
+}
+
+func configuredAutoSaveSeconds() -> TimeInterval {
+    let saved = UserDefaults.standard.double(forKey: autoSaveSecondsKey)
+    return saved > 0 ? min(max(saved, 1), 3600) : 10
 }
 
 private func setNativeThumbnail(enabled: Bool) {
@@ -98,6 +123,7 @@ private func filenameWithoutUUIDPrefix(_ name: String) -> String {
 final class HoverContainerView: NSView {
     var controls: [NSView] = []
     var onMouseEntered: (() -> Void)?
+    var onMouseExited: (() -> Void)?
     private var tracking: NSTrackingArea?
 
     override func updateTrackingAreas() {
@@ -121,6 +147,7 @@ final class HoverContainerView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        onMouseExited?()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.14
             controls.forEach { $0.animator().alphaValue = 0 }
@@ -192,6 +219,9 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private var editorController: EditorWindowController?
     private(set) var isManuallyPositioned = false
     private var isFinishing = false
+    private var autoSaveTimer: Timer?
+    private var settingsObserver: NSObjectProtocol?
+    private var isPointerOver = false
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -213,6 +243,12 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
         super.init(window: panel)
         buildInterface()
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .screenshotShelfSettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in self?.scheduleAutoSave() }
+        scheduleAutoSave()
     }
 
     required init?(coder: NSCoder) {
@@ -270,7 +306,16 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         imageView.beginDrag = { [weak self] event in self?.startDragging(event) }
         previewImageView = imageView
         lastImageModificationDate = modificationDate()
-        root.onMouseEntered = { [weak self] in self?.refreshPreviewIfNeeded() }
+        root.onMouseEntered = { [weak self] in
+            self?.isPointerOver = true
+            self?.autoSaveTimer?.invalidate()
+            self?.autoSaveTimer = nil
+            self?.refreshPreviewIfNeeded()
+        }
+        root.onMouseExited = { [weak self] in
+            self?.isPointerOver = false
+            self?.scheduleAutoSave()
+        }
         root.addSubview(imageView)
 
         let copy = makePill(title: "⧉  Copiar", action: #selector(copyCapture))
@@ -353,7 +398,11 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func saveCapture() {
         do {
-            let destination = uniqueDestination(originalURL)
+            let destination = uniqueDestination(
+                screenshotDirectory().appendingPathComponent(
+                    originalURL.lastPathComponent
+                )
+            )
             try persistCapture(to: destination, replaceExisting: false)
             finish(deletePending: false)
         } catch {
@@ -524,6 +573,12 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private func finish(deletePending: Bool) {
         guard !isFinishing else { return }
         isFinishing = true
+        autoSaveTimer?.invalidate()
+        autoSaveTimer = nil
+        if let settingsObserver {
+            NotificationCenter.default.removeObserver(settingsObserver)
+            self.settingsObserver = nil
+        }
         dragStarted = false
         editorController?.close()
         editorController = nil
@@ -531,6 +586,20 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         window?.orderOut(nil)
         window?.close()
         onFinished?(self)
+    }
+
+    private func scheduleAutoSave() {
+        autoSaveTimer?.invalidate()
+        autoSaveTimer = nil
+        guard !isFinishing,
+              !isPointerOver,
+              UserDefaults.standard.bool(forKey: autoSaveEnabledKey) else {
+            return
+        }
+        autoSaveTimer = Timer.scheduledTimer(
+            withTimeInterval: configuredAutoSaveSeconds(),
+            repeats: false
+        ) { [weak self] _ in self?.saveCapture() }
     }
 }
 
@@ -661,6 +730,7 @@ final class ScreenshotManager {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let manager = ScreenshotManager()
     private var statusItem: NSStatusItem?
+    private var settingsController: SettingsWindowController?
     private let updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
         updaterDelegate: nil,
@@ -696,6 +766,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updates.target = updaterController
         menu.addItem(updates)
+        let settings = NSMenuItem(
+            title: "Ajustes…",
+            action: #selector(showSettings),
+            keyEquivalent: ","
+        )
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Salir", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
@@ -711,6 +788,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func showSettings() {
+        if settingsController == nil {
+            settingsController = SettingsWindowController()
+        }
+        settingsController?.showSettings()
     }
 }
 

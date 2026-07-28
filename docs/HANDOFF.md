@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.4.4`
-- Build en desarrollo: `17`
-- Último tag publicado antes de este cambio: `v0.4.3`
+- Versión en desarrollo: `0.5.0`
+- Build en desarrollo: `18`
+- Último tag publicado antes de este cambio: `v0.4.4`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -39,6 +39,9 @@
 - Los errores de guardado se registran y se muestran sin perder la miniatura.
 - Guardar y `Guardar como…` comparten la misma escritura verificada y ambos
   cierran la miniatura después del éxito.
+- El menú incluye una ventana de Ajustes para elegir el destino predeterminado.
+- El cierre automático es opcional y su tiempo se configura entre 1 y 3600
+  segundos; al vencer, guarda la captura antes de cerrar la miniatura.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.
