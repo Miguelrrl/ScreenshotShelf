@@ -353,26 +353,38 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func saveCapture() {
         do {
-            let directory = originalURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
-            )
             let destination = uniqueDestination(originalURL)
+            try persistCapture(to: destination, replaceExisting: false)
+            finish(deletePending: false)
+        } catch {
+            presentSaveError(error)
+        }
+    }
+
+    private func persistCapture(to destination: URL, replaceExisting: Bool) throws {
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        if replaceExisting && FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(
+                destination,
+                withItemAt: stagedURL
+            )
+        } else {
             do {
                 try FileManager.default.moveItem(at: stagedURL, to: destination)
             } catch {
                 try FileManager.default.copyItem(at: stagedURL, to: destination)
                 try FileManager.default.removeItem(at: stagedURL)
             }
-            guard FileManager.default.fileExists(atPath: destination.path) else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            tagSavedFile(destination)
-            finish(deletePending: false)
-        } catch {
-            presentSaveError(error)
         }
+
+        guard FileManager.default.fileExists(atPath: destination.path) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        tagSavedFile(destination)
     }
 
     private func presentSaveError(_ error: Error) {
@@ -421,21 +433,13 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
             )
 
             do {
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    _ = try FileManager.default.replaceItemAt(
-                        destination,
-                        withItemAt: self.stagedURL
-                    )
-                } else {
-                    try FileManager.default.moveItem(
-                        at: self.stagedURL,
-                        to: destination
-                    )
-                }
-                tagSavedFile(destination)
+                try self.persistCapture(
+                    to: destination,
+                    replaceExisting: true
+                )
                 self.finish(deletePending: false)
             } catch {
-                NSSound.beep()
+                self.presentSaveError(error)
             }
         }
     }
