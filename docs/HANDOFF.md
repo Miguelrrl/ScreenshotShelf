@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.4.2`
-- Build en desarrollo: `15`
-- Último tag publicado antes de este cambio: `v0.4.1`
+- Versión en desarrollo: `0.4.3`
+- Build en desarrollo: `16`
+- Último tag publicado antes de este cambio: `v0.4.2`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -34,6 +34,9 @@
 - Las miniaturas participan en todos los Spaces y acompañan al usuario al
   cambiar de escritorio.
 - `Guardar como…` recuerda mediante `UserDefaults` la última carpeta elegida.
+- Guardar crea el directorio si falta, usa copia como respaldo del movimiento,
+  verifica el archivo final y oculta el panel antes de cerrarlo.
+- Los errores de guardado se registran y se muestran sin perder la miniatura.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.

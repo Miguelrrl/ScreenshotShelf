@@ -191,6 +191,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private var lastImageModificationDate: Date?
     private var editorController: EditorWindowController?
     private(set) var isManuallyPositioned = false
+    private var isFinishing = false
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -352,13 +353,41 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func saveCapture() {
         do {
+            let directory = originalURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
             let destination = uniqueDestination(originalURL)
-            try FileManager.default.moveItem(at: stagedURL, to: destination)
+            do {
+                try FileManager.default.moveItem(at: stagedURL, to: destination)
+            } catch {
+                try FileManager.default.copyItem(at: stagedURL, to: destination)
+                try FileManager.default.removeItem(at: stagedURL)
+            }
+            guard FileManager.default.fileExists(atPath: destination.path) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
             tagSavedFile(destination)
             finish(deletePending: false)
         } catch {
-            NSSound.beep()
+            presentSaveError(error)
         }
+    }
+
+    private func presentSaveError(_ error: Error) {
+        NSLog(
+            "%@: no se pudo guardar %@: %@",
+            appName,
+            stagedURL.path,
+            error.localizedDescription
+        )
+        NSSound.beep()
+        let alert = NSAlert(error: error)
+        alert.messageText = "No se pudo guardar la captura"
+        alert.informativeText = "\(error.localizedDescription)\n\nLa miniatura seguirá disponible."
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc private func saveCaptureAs() {
@@ -489,10 +518,13 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     }
 
     private func finish(deletePending: Bool) {
+        guard !isFinishing else { return }
+        isFinishing = true
         dragStarted = false
         editorController?.close()
         editorController = nil
         if deletePending { try? FileManager.default.removeItem(at: stagedURL) }
+        window?.orderOut(nil)
         window?.close()
         onFinished?(self)
     }
