@@ -36,7 +36,10 @@ ditto \
   "$ARM_BUILD/arm64-apple-macosx/release/Sparkle.framework" \
   "$APP/Contents/Frameworks/Sparkle.framework"
 
-codesign --force --deep --sign - "$APP"
+codesign --force --deep --sign - "$APP/Contents/Frameworks/Sparkle.framework"
+codesign --force --sign - \
+  --requirements '=designated => identifier "com.maxwell.screenshotshelf"' \
+  "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 echo "$APP"

@@ -8,25 +8,65 @@ import ScreenCaptureKit
 private enum CaptureMode { case region, display }
 
 private final class CaptureSelectionView: NSView {
+    private enum DragAction { case create, move, resizeLeft, resizeRight, resizeTop, resizeBottom }
     var mode: CaptureMode = .region { didSet { needsDisplay = true } }
     var selection = NSRect.zero { didSet { needsDisplay = true } }
     private var dragStart: NSPoint?
+    private var selectionAtDragStart = NSRect.zero
+    private var dragAction: DragAction = .create
 
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         guard mode == .region else { return }
-        dragStart = convert(event.locationInWindow, from: nil)
-        selection = NSRect(origin: dragStart!, size: .zero)
+        let point = convert(event.locationInWindow, from: nil)
+        dragStart = point
+        selectionAtDragStart = selection
+        let edge: CGFloat = 12
+        if abs(point.x - selection.minX) <= edge, point.y >= selection.minY - edge, point.y <= selection.maxY + edge {
+            dragAction = .resizeLeft
+        } else if abs(point.x - selection.maxX) <= edge, point.y >= selection.minY - edge, point.y <= selection.maxY + edge {
+            dragAction = .resizeRight
+        } else if abs(point.y - selection.maxY) <= edge, point.x >= selection.minX - edge, point.x <= selection.maxX + edge {
+            dragAction = .resizeTop
+        } else if abs(point.y - selection.minY) <= edge, point.x >= selection.minX - edge, point.x <= selection.maxX + edge {
+            dragAction = .resizeBottom
+        } else if selection.contains(point) {
+            dragAction = .move
+        } else {
+            dragAction = .create
+            selection = NSRect(origin: point, size: .zero)
+            selectionAtDragStart = selection
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let start = dragStart else { return }
         let point = convert(event.locationInWindow, from: nil)
-        selection = NSRect(
-            x: min(start.x, point.x), y: min(start.y, point.y),
-            width: abs(point.x - start.x), height: abs(point.y - start.y)
-        ).intersection(bounds)
+        switch dragAction {
+        case .create:
+            selection = NSRect(
+                x: min(start.x, point.x), y: min(start.y, point.y),
+                width: abs(point.x - start.x), height: abs(point.y - start.y)
+            ).intersection(bounds)
+        case .move:
+            var moved = selectionAtDragStart.offsetBy(dx: point.x - start.x, dy: point.y - start.y)
+            moved.origin.x = min(max(0, moved.origin.x), bounds.width - moved.width)
+            moved.origin.y = min(max(0, moved.origin.y), bounds.height - moved.height)
+            selection = moved
+        case .resizeLeft:
+            let right = selectionAtDragStart.maxX
+            selection.origin.x = min(max(0, point.x), right - 20)
+            selection.size.width = right - selection.minX
+        case .resizeRight:
+            selection.size.width = min(bounds.maxX, max(selectionAtDragStart.minX + 20, point.x)) - selectionAtDragStart.minX
+        case .resizeTop:
+            selection.size.height = min(bounds.maxY, max(selectionAtDragStart.minY + 20, point.y)) - selectionAtDragStart.minY
+        case .resizeBottom:
+            let top = selectionAtDragStart.maxY
+            selection.origin.y = min(max(0, point.y), top - 20)
+            selection.size.height = top - selection.minY
+        }
     }
 
     override func mouseUp(with event: NSEvent) { dragStart = nil }
@@ -71,7 +111,7 @@ private final class CaptureOverlayController: NSWindowController {
     private let screen: NSScreen
     var onRecord: ((NSScreen, NSRect) -> Void)?
 
-    init(screen: NSScreen) {
+    init(screen: NSScreen, initialSelection: NSRect) {
         self.screen = screen
         let window = NSWindow(
             contentRect: screen.frame,
@@ -87,6 +127,7 @@ private final class CaptureOverlayController: NSWindowController {
         window.hasShadow = false
         super.init(window: window)
         buildInterface()
+        selectionView.selection = initialSelection.intersection(selectionView.bounds)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -290,6 +331,7 @@ private final class StreamWriter: NSObject, SCStreamOutput {
 }
 
 final class ScreenRecordingCoordinator: NSObject {
+    private static let lastSelectionKey = "ScreenRecordingLastSelection"
     var onFinished: ((URL) -> Void)?
     private(set) var isHotKeyRegistered = false
     private var overlay: CaptureOverlayController?
@@ -357,16 +399,45 @@ final class ScreenRecordingCoordinator: NSObject {
     func showSelector() {
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
-        let controller = CaptureOverlayController(screen: screen)
+        let initialSelection = restoredSelection(in: screen.frame.size)
+        let controller = CaptureOverlayController(screen: screen, initialSelection: initialSelection)
         controller.onRecord = { [weak self] screen, rect in
             self?.overlay = nil
+            self?.storeSelection(rect, in: screen.frame.size)
             self?.startRecording(screen: screen, selection: rect)
         }
         overlay = controller
         controller.showOverlay()
     }
 
+    private func restoredSelection(in size: NSSize) -> NSRect {
+        if let value = UserDefaults.standard.string(forKey: Self.lastSelectionKey) {
+            let numbers = value.split(separator: ",").compactMap { Double($0) }
+            if numbers.count == 4 {
+                let rect = NSRect(
+                    x: numbers[0] * size.width, y: numbers[1] * size.height,
+                    width: numbers[2] * size.width, height: numbers[3] * size.height
+                ).intersection(NSRect(origin: .zero, size: size))
+                if rect.width >= 20, rect.height >= 20 { return rect }
+            }
+        }
+        let width = size.width * 0.6
+        let height = size.height * 0.55
+        return NSRect(x: (size.width - width) / 2, y: (size.height - height) / 2, width: width, height: height)
+    }
+
+    private func storeSelection(_ rect: NSRect, in size: NSSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        let value = [rect.minX / size.width, rect.minY / size.height, rect.width / size.width, rect.height / size.height]
+            .map(String.init).joined(separator: ",")
+        UserDefaults.standard.set(value, forKey: Self.lastSelectionKey)
+    }
+
     private func startRecording(screen: NSScreen, selection: NSRect) {
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            // macOS presents its own consent sheet. The user can retry after granting access.
+            return
+        }
         guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { return }
         Task {
             do {
