@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.5.2`
-- Build en desarrollo: `20`
-- Último tag publicado antes de este cambio: `v0.5.1`
+- Versión en desarrollo: `0.5.3`
+- Build en desarrollo: `21`
+- Último tag publicado antes de este cambio: `v0.5.2`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -46,6 +46,10 @@
   el monitor no vuelva a tratarlos como capturas nuevas.
 - Ajustes permite copiar automáticamente cada captura nueva al portapapeles sin
   cerrar su miniatura.
+- La copia automática puede ocultar por completo la miniatura; en ese modo la
+  captura se guarda directamente en el destino predeterminado.
+- El temporizador de guardado automático continúa aunque el cursor esté sobre
+  la miniatura.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.

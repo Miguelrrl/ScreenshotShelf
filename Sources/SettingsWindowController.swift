@@ -1,6 +1,6 @@
 import AppKit
 
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private let pathLabel = NSTextField(labelWithString: "")
     private let autoSaveCheckbox = NSButton(
         checkboxWithTitle: "Guardar y cerrar automáticamente las miniaturas",
@@ -12,12 +12,17 @@ final class SettingsWindowController: NSWindowController {
         target: nil,
         action: nil
     )
+    private let hideAfterAutoCopyCheckbox = NSButton(
+        checkboxWithTitle: "No mostrar miniatura al copiar automáticamente",
+        target: nil,
+        action: nil
+    )
     private let secondsField = NSTextField()
     private let secondsStepper = NSStepper()
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 285),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 325),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -50,11 +55,14 @@ final class SettingsWindowController: NSWindowController {
         autoSaveCheckbox.action = #selector(changeAutoSave)
         autoCopyCheckbox.target = self
         autoCopyCheckbox.action = #selector(changeAutoCopy)
+        hideAfterAutoCopyCheckbox.target = self
+        hideAfterAutoCopyCheckbox.action = #selector(changeHideAfterAutoCopy)
 
         let secondsTitle = NSTextField(labelWithString: "Cerrar después de:")
         secondsField.alignment = .right
         secondsField.target = self
         secondsField.action = #selector(changeSeconds)
+        secondsField.delegate = self
         secondsField.widthAnchor.constraint(equalToConstant: 58).isActive = true
 
         secondsStepper.minValue = 1
@@ -84,6 +92,7 @@ final class SettingsWindowController: NSWindowController {
 
         let stack = NSStackView(views: [
             title, locationRow, separator(), autoCopyCheckbox,
+            hideAfterAutoCopyCheckbox,
             autoSaveCheckbox, secondsRow, note
         ])
         stack.orientation = .vertical
@@ -112,9 +121,12 @@ final class SettingsWindowController: NSWindowController {
     private func loadValues() {
         pathLabel.stringValue = screenshotDirectory().path
         let enabled = UserDefaults.standard.bool(forKey: autoSaveEnabledKey)
-        autoCopyCheckbox.state = UserDefaults.standard.bool(
-            forKey: autoCopyEnabledKey
+        let autoCopyEnabled = UserDefaults.standard.bool(forKey: autoCopyEnabledKey)
+        autoCopyCheckbox.state = autoCopyEnabled ? .on : .off
+        hideAfterAutoCopyCheckbox.state = UserDefaults.standard.bool(
+            forKey: hideAfterAutoCopyKey
         ) ? .on : .off
+        hideAfterAutoCopyCheckbox.isEnabled = autoCopyEnabled
         autoSaveCheckbox.state = enabled ? .on : .off
         let seconds = configuredAutoSaveSeconds()
         secondsField.integerValue = Int(seconds)
@@ -152,13 +164,24 @@ final class SettingsWindowController: NSWindowController {
     }
 
     @objc private func changeAutoCopy() {
+        let enabled = autoCopyCheckbox.state == .on
+        UserDefaults.standard.set(enabled, forKey: autoCopyEnabledKey)
+        hideAfterAutoCopyCheckbox.isEnabled = enabled
+    }
+
+    @objc private func changeHideAfterAutoCopy() {
         UserDefaults.standard.set(
-            autoCopyCheckbox.state == .on,
-            forKey: autoCopyEnabledKey
+            hideAfterAutoCopyCheckbox.state == .on,
+            forKey: hideAfterAutoCopyKey
         )
     }
 
     @objc private func changeSeconds() {
+        saveSeconds(Double(secondsField.integerValue))
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard notification.object as? NSTextField === secondsField else { return }
         saveSeconds(Double(secondsField.integerValue))
     }
 

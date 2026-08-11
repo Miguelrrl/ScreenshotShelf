@@ -11,6 +11,7 @@ let defaultScreenshotDirectoryKey = "DefaultScreenshotDirectory"
 let autoSaveEnabledKey = "AutoSaveEnabled"
 let autoSaveSecondsKey = "AutoSaveSeconds"
 let autoCopyEnabledKey = "AutoCopyEnabled"
+let hideAfterAutoCopyKey = "HideAfterAutoCopy"
 
 extension Notification.Name {
     static let screenshotShelfSettingsChanged = Notification.Name(
@@ -223,7 +224,6 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     private var isFinishing = false
     private var autoSaveTimer: Timer?
     private var settingsObserver: NSObjectProtocol?
-    private var isPointerOver = false
 
     init(stagedURL: URL, originalURL: URL) {
         self.stagedURL = stagedURL
@@ -309,14 +309,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         previewImageView = imageView
         lastImageModificationDate = modificationDate()
         root.onMouseEntered = { [weak self] in
-            self?.isPointerOver = true
-            self?.autoSaveTimer?.invalidate()
-            self?.autoSaveTimer = nil
             self?.refreshPreviewIfNeeded()
-        }
-        root.onMouseExited = { [weak self] in
-            self?.isPointerOver = false
-            self?.scheduleAutoSave()
         }
         root.addSubview(imageView)
 
@@ -596,7 +589,6 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
         autoSaveTimer?.invalidate()
         autoSaveTimer = nil
         guard !isFinishing,
-              !isPointerOver,
               UserDefaults.standard.bool(forKey: autoSaveEnabledKey) else {
             return
         }
@@ -705,10 +697,43 @@ final class ScreenshotManager {
                     NSLog("%@: no se pudo copiar automáticamente %@", appName, staged.path)
                 }
             }
+            if UserDefaults.standard.bool(forKey: autoCopyEnabledKey),
+               UserDefaults.standard.bool(forKey: hideAfterAutoCopyKey) {
+                saveWithoutThumbnail(staged: staged, destination: original)
+                return
+            }
             show(staged: staged, original: original)
         } catch {
             // The file may still be finishing; a later scan will retry it.
             NSLog("%@: no se pudo mover %@: %@", appName, source.path, error.localizedDescription)
+        }
+    }
+
+    private func saveWithoutThumbnail(staged: URL, destination requested: URL) {
+        let destination = uniqueDestination(
+            screenshotDirectory().appendingPathComponent(requested.lastPathComponent)
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            do {
+                try FileManager.default.moveItem(at: staged, to: destination)
+            } catch {
+                try FileManager.default.copyItem(at: staged, to: destination)
+                try FileManager.default.removeItem(at: staged)
+            }
+            seen.insert(destination.standardizedFileURL.path)
+            tagSavedFile(destination)
+        } catch {
+            NSLog(
+                "%@: no se pudo guardar la captura copiada %@: %@",
+                appName,
+                staged.path,
+                error.localizedDescription
+            )
+            show(staged: staged, original: requested)
         }
     }
 
