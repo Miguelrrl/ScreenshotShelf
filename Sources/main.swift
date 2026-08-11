@@ -10,6 +10,7 @@ private let lastSaveAsDirectoryKey = "LastSaveAsDirectory"
 let defaultScreenshotDirectoryKey = "DefaultScreenshotDirectory"
 let autoSaveEnabledKey = "AutoSaveEnabled"
 let autoSaveSecondsKey = "AutoSaveSeconds"
+let autoCopyEnabledKey = "AutoCopyEnabled"
 
 extension Notification.Name {
     static let screenshotShelfSettingsChanged = Notification.Name(
@@ -696,6 +697,14 @@ final class ScreenshotManager {
         do {
             try FileManager.default.moveItem(at: source, to: staged)
             seen.insert(source.path)
+            if UserDefaults.standard.bool(forKey: autoCopyEnabledKey),
+               let image = NSImage(contentsOf: staged) {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                if !pasteboard.writeObjects([image]) {
+                    NSLog("%@: no se pudo copiar automáticamente %@", appName, staged.path)
+                }
+            }
             show(staged: staged, original: original)
         } catch {
             // The file may still be finishing; a later scan will retry it.

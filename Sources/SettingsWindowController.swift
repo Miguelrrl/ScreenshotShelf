@@ -7,12 +7,17 @@ final class SettingsWindowController: NSWindowController {
         target: nil,
         action: nil
     )
+    private let autoCopyCheckbox = NSButton(
+        checkboxWithTitle: "Copiar automáticamente cada captura al portapapeles",
+        target: nil,
+        action: nil
+    )
     private let secondsField = NSTextField()
     private let secondsStepper = NSStepper()
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 245),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 285),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -43,6 +48,8 @@ final class SettingsWindowController: NSWindowController {
 
         autoSaveCheckbox.target = self
         autoSaveCheckbox.action = #selector(changeAutoSave)
+        autoCopyCheckbox.target = self
+        autoCopyCheckbox.action = #selector(changeAutoCopy)
 
         let secondsTitle = NSTextField(labelWithString: "Cerrar después de:")
         secondsField.alignment = .right
@@ -76,7 +83,8 @@ final class SettingsWindowController: NSWindowController {
         note.textColor = .secondaryLabelColor
 
         let stack = NSStackView(views: [
-            title, locationRow, separator(), autoSaveCheckbox, secondsRow, note
+            title, locationRow, separator(), autoCopyCheckbox,
+            autoSaveCheckbox, secondsRow, note
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -104,6 +112,9 @@ final class SettingsWindowController: NSWindowController {
     private func loadValues() {
         pathLabel.stringValue = screenshotDirectory().path
         let enabled = UserDefaults.standard.bool(forKey: autoSaveEnabledKey)
+        autoCopyCheckbox.state = UserDefaults.standard.bool(
+            forKey: autoCopyEnabledKey
+        ) ? .on : .off
         autoSaveCheckbox.state = enabled ? .on : .off
         let seconds = configuredAutoSaveSeconds()
         secondsField.integerValue = Int(seconds)
@@ -138,6 +149,13 @@ final class SettingsWindowController: NSWindowController {
         UserDefaults.standard.set(enabled, forKey: autoSaveEnabledKey)
         setSecondsEnabled(enabled)
         NotificationCenter.default.post(name: .screenshotShelfSettingsChanged, object: nil)
+    }
+
+    @objc private func changeAutoCopy() {
+        UserDefaults.standard.set(
+            autoCopyCheckbox.state == .on,
+            forKey: autoCopyEnabledKey
+        )
     }
 
     @objc private func changeSeconds() {
