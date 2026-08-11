@@ -360,14 +360,133 @@ final class VideoThumbnailController: NSWindowController, NSDraggingSource {
     }
 }
 
+private final class VideoTrimTimelineView: NSView {
+    var duration: Double = 1
+    var startTime: Double = 0 { didSet { needsDisplay = true } }
+    var endTime: Double = 1 { didSet { needsDisplay = true } }
+    var playhead: Double = 0 { didSet { needsDisplay = true } }
+    var onRangeChanged: (() -> Void)?
+    var onSeek: ((Double) -> Void)?
+    private var thumbnails: [NSImage] = []
+    private enum DragTarget { case start, end, playhead }
+    private var dragTarget: DragTarget?
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 92) }
+
+    func loadThumbnails(from url: URL) {
+        let duration = self.duration
+        DispatchQueue.global(qos: .userInitiated).async {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = NSSize(width: 240, height: 120)
+            var images: [NSImage] = []
+            for index in 0..<10 {
+                let time = CMTime(seconds: duration * Double(index) / 10, preferredTimescale: 600)
+                if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+                    images.append(NSImage(cgImage: cgImage, size: .zero))
+                }
+            }
+            DispatchQueue.main.async { self.thumbnails = images; self.needsDisplay = true }
+        }
+    }
+
+    private var trackRect: NSRect { bounds.insetBy(dx: 16, dy: 12) }
+    private func x(for time: Double) -> CGFloat {
+        trackRect.minX + CGFloat(time / max(duration, 0.001)) * trackRect.width
+    }
+    private func time(for x: CGFloat) -> Double {
+        min(max(Double((x - trackRect.minX) / trackRect.width) * duration, 0), duration)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = trackRect
+        let clip = NSBezierPath(roundedRect: track, xRadius: 8, yRadius: 8)
+        NSGraphicsContext.saveGraphicsState()
+        clip.addClip()
+        NSColor(calibratedWhite: 0.12, alpha: 1).setFill()
+        track.fill()
+        if !thumbnails.isEmpty {
+            let width = track.width / CGFloat(thumbnails.count)
+            for (index, image) in thumbnails.enumerated() {
+                image.draw(
+                    in: NSRect(x: track.minX + CGFloat(index) * width, y: track.minY, width: width + 1, height: track.height),
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 0.8,
+                    respectFlipped: true,
+                    hints: [.interpolation: NSImageInterpolation.low]
+                )
+            }
+        }
+        NSColor.black.withAlphaComponent(0.62).setFill()
+        NSRect(x: track.minX, y: track.minY, width: max(0, x(for: startTime) - track.minX), height: track.height).fill()
+        NSRect(x: x(for: endTime), y: track.minY, width: max(0, track.maxX - x(for: endTime)), height: track.height).fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        let selected = NSRect(
+            x: x(for: startTime), y: track.minY,
+            width: x(for: endTime) - x(for: startTime), height: track.height
+        )
+        let outline = NSBezierPath(roundedRect: selected, xRadius: 5, yRadius: 5)
+        outline.lineWidth = 3
+        NSColor.controlAccentColor.setStroke()
+        outline.stroke()
+        for handleX in [selected.minX, selected.maxX] {
+            let handle = NSBezierPath(roundedRect: NSRect(x: handleX - 6, y: track.minY - 3, width: 12, height: track.height + 6), xRadius: 5, yRadius: 5)
+            NSColor.controlAccentColor.setFill()
+            handle.fill()
+        }
+        let playheadX = x(for: playhead)
+        let playheadPath = NSBezierPath()
+        playheadPath.move(to: NSPoint(x: playheadX, y: track.minY - 7))
+        playheadPath.line(to: NSPoint(x: playheadX, y: track.maxY + 7))
+        playheadPath.lineWidth = 2
+        NSColor.white.setStroke()
+        playheadPath.stroke()
+        let head = NSBezierPath(ovalIn: NSRect(x: playheadX - 5, y: track.maxY + 2, width: 10, height: 10))
+        NSColor.white.setFill()
+        head.fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let distances: [(DragTarget, CGFloat)] = [
+            (.start, abs(point.x - x(for: startTime))),
+            (.end, abs(point.x - x(for: endTime))),
+            (.playhead, abs(point.x - x(for: playhead)))
+        ]
+        dragTarget = distances.min(by: { $0.1 < $1.1 })?.0
+        updateDrag(at: point.x)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        updateDrag(at: convert(event.locationInWindow, from: nil).x)
+    }
+    override func mouseUp(with event: NSEvent) { dragTarget = nil }
+    private func updateDrag(at x: CGFloat) {
+        let value = time(for: x)
+        switch dragTarget {
+        case .start:
+            startTime = min(value, endTime - 0.1)
+            playhead = startTime
+            onRangeChanged?(); onSeek?(playhead)
+        case .end:
+            endTime = max(value, startTime + 0.1)
+            playhead = endTime
+            onRangeChanged?(); onSeek?(playhead)
+        case .playhead:
+            playhead = min(max(value, startTime), endTime)
+            onSeek?(playhead)
+        case nil: break
+        }
+    }
+}
+
 final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
     private let videoURL: URL
     private let player: AVPlayer
     private let duration: Double
     private let playerView = AVPlayerView()
-    private let positionSlider = NSSlider()
-    private let startSlider = NSSlider()
-    private let endSlider = NSSlider()
+    private let timeline = VideoTrimTimelineView()
     private let startLabel = NSTextField(labelWithString: "")
     private let endLabel = NSTextField(labelWithString: "")
     private var timeObserver: Any?
@@ -396,6 +515,7 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         buildInterface()
+        timeline.loadThumbnails(from: videoURL)
         observePlayback()
     }
 
@@ -403,42 +523,33 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
 
     private func buildInterface() {
         guard let content = window?.contentView else { return }
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor(calibratedWhite: 0.055, alpha: 1).cgColor
         playerView.player = player
         playerView.controlsStyle = .floating
         playerView.videoGravity = .resizeAspect
         playerView.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(playerView)
+        let playerContainer = NSView()
+        playerContainer.wantsLayer = true
+        playerContainer.layer?.backgroundColor = NSColor.black.cgColor
+        playerContainer.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(playerContainer)
+        playerContainer.addSubview(playerView)
 
-        positionSlider.minValue = 0
-        positionSlider.maxValue = duration
-        positionSlider.target = self
-        positionSlider.action = #selector(scrub(_:))
-
-        startSlider.minValue = 0
-        startSlider.maxValue = duration
-        startSlider.doubleValue = 0
-        startSlider.target = self
-        startSlider.action = #selector(changeStart(_:))
-        endSlider.minValue = 0
-        endSlider.maxValue = duration
-        endSlider.doubleValue = duration
-        endSlider.target = self
-        endSlider.action = #selector(changeEnd(_:))
+        timeline.duration = duration
+        timeline.startTime = 0
+        timeline.endTime = duration
+        timeline.playhead = 0
+        timeline.onRangeChanged = { [weak self] in self?.updateLabels() }
+        timeline.onSeek = { [weak self] time in self?.seek(to: time) }
         updateLabels()
-
-        let startRow = NSStackView(views: [
-            NSTextField(labelWithString: "Inicio"), startSlider, startLabel
+        let rangeLabels = NSStackView(views: [
+            NSTextField(labelWithString: "Inicio"), startLabel,
+            NSView(), NSTextField(labelWithString: "Final"), endLabel
         ])
-        let endRow = NSStackView(views: [
-            NSTextField(labelWithString: "Final"), endSlider, endLabel
-        ])
-        [startRow, endRow].forEach {
-            $0.orientation = .horizontal
-            $0.alignment = .centerY
-            $0.spacing = 10
-        }
-        startLabel.widthAnchor.constraint(equalToConstant: 62).isActive = true
-        endLabel.widthAnchor.constraint(equalToConstant: 62).isActive = true
+        rangeLabels.orientation = .horizontal
+        rangeLabels.alignment = .centerY
+        rangeLabels.spacing = 8
 
         let buttons = NSStackView()
         buttons.orientation = .horizontal
@@ -454,23 +565,36 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
         buttons.addArrangedSubview(cancel)
         buttons.addArrangedSubview(apply)
 
-        let controls = NSStackView(views: [positionSlider, startRow, endRow, buttons])
+        let controlsBackground = NSVisualEffectView()
+        controlsBackground.material = .sidebar
+        controlsBackground.state = .active
+        controlsBackground.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(controlsBackground)
+        let controls = NSStackView(views: [timeline, rangeLabels, buttons])
         controls.orientation = .vertical
         controls.alignment = .leading
         controls.spacing = 10
         controls.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(controls)
+        controlsBackground.addSubview(controls)
         NSLayoutConstraint.activate([
-            playerView.topAnchor.constraint(equalTo: content.topAnchor),
-            playerView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            playerView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            playerView.bottomAnchor.constraint(equalTo: controls.topAnchor, constant: -12),
-            controls.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
-            controls.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
-            controls.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
-            positionSlider.widthAnchor.constraint(equalTo: controls.widthAnchor),
-            startRow.widthAnchor.constraint(equalTo: controls.widthAnchor),
-            endRow.widthAnchor.constraint(equalTo: controls.widthAnchor),
+            playerContainer.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            playerContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
+            playerContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            playerContainer.bottomAnchor.constraint(equalTo: controlsBackground.topAnchor, constant: -18),
+            playerView.topAnchor.constraint(equalTo: playerContainer.topAnchor),
+            playerView.leadingAnchor.constraint(equalTo: playerContainer.leadingAnchor),
+            playerView.trailingAnchor.constraint(equalTo: playerContainer.trailingAnchor),
+            playerView.bottomAnchor.constraint(equalTo: playerContainer.bottomAnchor),
+            controlsBackground.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            controlsBackground.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            controlsBackground.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            controlsBackground.heightAnchor.constraint(equalToConstant: 166),
+            controls.leadingAnchor.constraint(equalTo: controlsBackground.leadingAnchor, constant: 18),
+            controls.trailingAnchor.constraint(equalTo: controlsBackground.trailingAnchor, constant: -18),
+            controls.topAnchor.constraint(equalTo: controlsBackground.topAnchor, constant: 10),
+            controls.bottomAnchor.constraint(equalTo: controlsBackground.bottomAnchor, constant: -12),
+            timeline.widthAnchor.constraint(equalTo: controls.widthAnchor),
+            rangeLabels.widthAnchor.constraint(equalTo: controls.widthAnchor),
             buttons.widthAnchor.constraint(equalTo: controls.widthAnchor)
         ])
     }
@@ -482,31 +606,19 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
         ) { [weak self] time in
             guard let self else { return }
             let seconds = CMTimeGetSeconds(time)
-            self.positionSlider.doubleValue = seconds
-            if seconds >= self.endSlider.doubleValue {
+            self.timeline.playhead = seconds
+            if seconds >= self.timeline.endTime {
                 self.player.pause()
-                self.seek(to: self.startSlider.doubleValue)
+                self.seek(to: self.timeline.startTime)
             }
         }
-    }
-
-    @objc private func scrub(_ sender: NSSlider) { seek(to: sender.doubleValue) }
-    @objc private func changeStart(_ sender: NSSlider) {
-        sender.doubleValue = min(sender.doubleValue, endSlider.doubleValue - 0.1)
-        updateLabels()
-        seek(to: sender.doubleValue)
-    }
-    @objc private func changeEnd(_ sender: NSSlider) {
-        sender.doubleValue = max(sender.doubleValue, startSlider.doubleValue + 0.1)
-        updateLabels()
-        seek(to: sender.doubleValue)
     }
     private func seek(to seconds: Double) {
         player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
     private func updateLabels() {
-        startLabel.stringValue = format(startSlider.doubleValue)
-        endLabel.stringValue = format(endSlider.doubleValue)
+        startLabel.stringValue = format(timeline.startTime)
+        endLabel.stringValue = format(timeline.endTime)
     }
     private func format(_ seconds: Double) -> String {
         String(format: "%02d:%02d.%01d", Int(seconds) / 60, Int(seconds) % 60, Int(seconds * 10) % 10)
@@ -523,8 +635,8 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
             source: videoURL,
             destination: temporary,
             fileType: .mov,
-            start: startSlider.doubleValue,
-            end: endSlider.doubleValue
+            start: timeline.startTime,
+            end: timeline.endTime
         ) { [weak self] result in
             guard let self else { return }
             self.exporting = false
@@ -542,7 +654,7 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
 
     @objc private func exportGIF() {
         guard !exporting else { return }
-        let selectedDuration = endSlider.doubleValue - startSlider.doubleValue
+        let selectedDuration = timeline.endTime - timeline.startTime
         guard selectedDuration <= 120 else {
             present(VideoExportError.exportFailed("Recorte el video a un máximo de 2 minutos para exportarlo como GIF."))
             return
@@ -575,8 +687,8 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
         at destination: URL,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
-        let start = startSlider.doubleValue
-        let end = endSlider.doubleValue
+        let start = timeline.startTime
+        let end = timeline.endTime
         DispatchQueue.global(qos: .userInitiated).async {
             let fps = 12.0
             let frameCount = max(1, Int((end - start) * fps))

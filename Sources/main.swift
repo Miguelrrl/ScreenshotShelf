@@ -641,6 +641,11 @@ final class ScreenshotManager {
         timer = nil
     }
 
+    func ingestRecording(_ source: URL) {
+        guard FileManager.default.fileExists(atPath: source.path) else { return }
+        stageVideo(source)
+    }
+
     private func recoverPendingFiles() {
         let destination = screenshotDirectory()
         let files = (try? FileManager.default.contentsOfDirectory(
@@ -859,6 +864,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let manager = ScreenshotManager()
     private var statusItem: NSStatusItem?
     private var settingsController: SettingsWindowController?
+    private lazy var recordingCoordinator: ScreenRecordingCoordinator = {
+        let coordinator = ScreenRecordingCoordinator()
+        coordinator.onFinished = { [weak self] url in
+            self?.manager.ingestRecording(url)
+        }
+        return coordinator
+    }()
     private let updaterController = SPUStandardUpdaterController(
         startingUpdater: true,
         updaterDelegate: nil,
@@ -866,6 +878,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = recordingCoordinator
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let statusIcon = NSImage(
             systemSymbolName: "photo.on.rectangle.angled",
@@ -894,6 +907,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updates.target = updaterController
         menu.addItem(updates)
+        let record = NSMenuItem(
+            title: "Grabar pantalla…",
+            action: #selector(showRecorder),
+            keyEquivalent: ""
+        )
+        record.target = self
+        menu.addItem(record)
         let settings = NSMenuItem(
             title: "Ajustes…",
             action: #selector(showSettings),
@@ -923,6 +943,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsController = SettingsWindowController()
         }
         settingsController?.showSettings()
+    }
+
+    @objc private func showRecorder() {
+        recordingCoordinator.toggleCaptureUI()
     }
 }
 
