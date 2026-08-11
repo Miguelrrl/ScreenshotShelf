@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.7.1`
-- Build en desarrollo: `24`
-- Último tag publicado antes de este cambio: `v0.7.0`
+- Versión en desarrollo: `0.7.2`
+- Build en desarrollo: `25`
+- Último tag publicado antes de este cambio: `v0.7.1`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`

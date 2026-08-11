@@ -355,10 +355,6 @@ final class ScreenRecordingCoordinator: NSObject {
     }
 
     func showSelector() {
-        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
-            showPermissionAlert()
-            return
-        }
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
         let controller = CaptureOverlayController(screen: screen)
@@ -429,7 +425,15 @@ final class ScreenRecordingCoordinator: NSObject {
                     self.hud = hud
                     hud.showHUD()
                 }
-            } catch { await MainActor.run { self.present(error) } }
+            } catch {
+                await MainActor.run {
+                    if CGPreflightScreenCaptureAccess() {
+                        self.present(error)
+                    } else {
+                        self.showPermissionAlert()
+                    }
+                }
+            }
         }
     }
 
