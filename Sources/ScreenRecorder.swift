@@ -190,7 +190,7 @@ private final class CaptureOverlayController: NSWindowController {
         selectionView.autoresizingMask = [.width, .height]
         content.addSubview(selectionView)
 
-        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 400, height: 58))
+        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 270, height: 58))
         bar.material = .hudWindow
         bar.state = .active
         bar.wantsLayer = true
@@ -199,13 +199,13 @@ private final class CaptureOverlayController: NSWindowController {
         bar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(bar)
 
-        let region = NSButton(title: "Área", target: self, action: #selector(selectRegion))
-        region.image = NSImage(systemSymbolName: "viewfinder", accessibilityDescription: "Área")
-        let display = NSButton(title: "Pantalla", target: self, action: #selector(selectDisplay))
-        display.image = NSImage(systemSymbolName: "display", accessibilityDescription: "Pantalla")
-        let cancel = NSButton(title: "Cancelar", target: self, action: #selector(cancel))
-        let record = NSButton(title: "Grabar", target: self, action: #selector(record))
-        record.bezelColor = .systemRed
+        let region = toolbarButton(symbol: "viewfinder", label: "Seleccionar área", action: #selector(selectRegion))
+        let display = toolbarButton(symbol: "display", label: "Grabar pantalla completa", action: #selector(selectDisplay))
+        let cancel = toolbarButton(symbol: "xmark", label: "Cancelar (Esc)", action: #selector(cancel))
+        cancel.keyEquivalent = "\u{1b}"
+        cancel.keyEquivalentModifierMask = []
+        let record = toolbarButton(symbol: "record.circle.fill", label: "Comenzar grabación", action: #selector(record))
+        record.contentTintColor = .systemRed
         let stack = NSStackView(views: [region, display, cancel, record])
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -215,11 +215,25 @@ private final class CaptureOverlayController: NSWindowController {
         NSLayoutConstraint.activate([
             bar.centerXAnchor.constraint(equalTo: content.centerXAnchor),
             bar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -42),
-            bar.widthAnchor.constraint(equalToConstant: 400),
+            bar.widthAnchor.constraint(equalToConstant: 270),
             bar.heightAnchor.constraint(equalToConstant: 58),
             stack.centerXAnchor.constraint(equalTo: bar.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: bar.centerYAnchor)
         ])
+    }
+
+    private func toolbarButton(symbol: String, label: String, action: Selector) -> NSButton {
+        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: label)!, target: self, action: action)
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .texturedRounded
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 44),
+            button.heightAnchor.constraint(equalToConstant: 36)
+        ])
+        return button
     }
 
     func showOverlay() {
