@@ -85,8 +85,8 @@ No ejecute simultáneamente el módulo `screenshot-thumb.lua` de Hammerspoon.
 20. Guardar exporta un MP4 reproducible y cierra la miniatura.
 21. El editor permite recortar el inicio y final del video.
 22. Exportar GIF crea un archivo animado con el rango seleccionado.
-23. Con Accesibilidad concedida, `⌘⇧5` abre el selector de ScreenshotShelf y no
-    el selector de Apple.
+23. Con el atajo nativo de Apple desactivado, `⌘⇧5` abre el selector de
+    ScreenshotShelf mediante el hotkey global de Carbon.
 24. El selector permite arrastrar una región o elegir la pantalla completa.
 25. El HUD muestra duración y Detener, pero no aparece en la grabación.
 26. El editor presenta una línea de tiempo con fotogramas y dos manijas.

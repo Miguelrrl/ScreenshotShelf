@@ -908,7 +908,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates.target = updaterController
         menu.addItem(updates)
         let record = NSMenuItem(
-            title: "Grabar pantalla…",
+            title: recordingCoordinator.isHotKeyRegistered
+                ? "Grabar pantalla…  ⌘⇧5"
+                : "Grabar pantalla… (atajo no disponible)",
             action: #selector(showRecorder),
             keyEquivalent: ""
         )

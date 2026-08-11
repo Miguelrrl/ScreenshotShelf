@@ -63,12 +63,12 @@ elimina después de una espera breve.
 
 ### Grabador propio
 
-- `ScreenRecordingCoordinator` instala un event tap para reemplazar `⌘⇧5`.
+- `ScreenRecordingCoordinator` registra `⌘⇧5` con Carbon.
 - `CaptureOverlayController` dibuja el selector de región o pantalla.
 - `SCStream` captura video y audio; `StreamWriter` los codifica como H.264/AAC.
 - `RecordingHUDController` muestra tiempo y Detener sin aparecer en el video.
 - Al finalizar, el MOV entra directamente al flujo de miniatura y edición.
-- Requiere permisos de Accesibilidad y Grabación de pantalla en cada Mac.
+- Requiere desactivar el `⌘⇧5` nativo y conceder Grabación de pantalla.
 
 ### `AppDelegate`
 

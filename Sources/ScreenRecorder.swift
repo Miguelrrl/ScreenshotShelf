@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import Carbon
 import CoreMedia
 import ScreenCaptureKit
 
@@ -290,12 +291,13 @@ private final class StreamWriter: NSObject, SCStreamOutput {
 
 final class ScreenRecordingCoordinator: NSObject {
     var onFinished: ((URL) -> Void)?
+    private(set) var isHotKeyRegistered = false
     private var overlay: CaptureOverlayController?
     private var hud: RecordingHUDController?
     private var stream: SCStream?
     private var writer: StreamWriter?
-    private var eventTap: CFMachPort?
-    private var eventTapSource: CFRunLoopSource?
+    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyHandler: EventHandlerRef?
     private var isRecording = false
 
     override init() {
@@ -304,39 +306,46 @@ final class ScreenRecordingCoordinator: NSObject {
     }
 
     func installHotKey() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        guard AXIsProcessTrustedWithOptions(options) else { return }
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-        eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: { _, type, event, refcon in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let coordinator = Unmanaged<ScreenRecordingCoordinator>.fromOpaque(refcon).takeUnretainedValue()
-                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                    if let tap = coordinator.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
-                    return Unmanaged.passUnretained(event)
-                }
-                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                let flags = event.flags
-                let modifiersMatch = flags.contains(.maskCommand) && flags.contains(.maskShift)
-                    && !flags.contains(.maskAlternate) && !flags.contains(.maskControl)
-                if keyCode == 23 && modifiersMatch {
-                    DispatchQueue.main.async { coordinator.toggleCaptureUI() }
-                    return nil
-                }
-                return Unmanaged.passUnretained(event)
-            },
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        guard hotKeyRef == nil else { return }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
         )
-        guard let eventTap else { return }
-        eventTapSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
-        if let eventTapSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), eventTapSource, .commonModes)
+        let pointer = Unmanaged.passUnretained(self).toOpaque()
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData in
+                guard let userData else { return OSStatus(eventNotHandledErr) }
+                let coordinator = Unmanaged<ScreenRecordingCoordinator>
+                    .fromOpaque(userData)
+                    .takeUnretainedValue()
+                DispatchQueue.main.async { coordinator.toggleCaptureUI() }
+                return noErr
+            },
+            1,
+            &eventType,
+            pointer,
+            &hotKeyHandler
+        )
+        guard handlerStatus == noErr else {
+            NSLog("%@: no se pudo instalar el manejador de ⌘⇧5 (%d)", appName, handlerStatus)
+            return
         }
-        CGEvent.tapEnable(tap: eventTap, enable: true)
+        let identifier = EventHotKeyID(signature: 0x53534846, id: 1)
+        let status = RegisterEventHotKey(
+            UInt32(kVK_ANSI_5),
+            UInt32(cmdKey | shiftKey),
+            identifier,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+        if status == noErr {
+            isHotKeyRegistered = true
+            NSLog("%@: atajo ⌘⇧5 registrado", appName)
+        } else {
+            NSLog("%@: no se pudo registrar ⌘⇧5 (%d)", appName, status)
+        }
     }
 
     func toggleCaptureUI() {

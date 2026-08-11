@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.7.0`
-- Build en desarrollo: `23`
-- Último tag publicado antes de este cambio: `v0.6.0`
+- Versión en desarrollo: `0.7.1`
+- Build en desarrollo: `24`
+- Último tag publicado antes de este cambio: `v0.7.0`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -56,7 +56,8 @@
   descartar, mover y drag and drop.
 - El editor de video reproduce, navega y recorta el inicio y final.
 - Guarda videos como MP4 y exporta GIF de hasta dos minutos a 12 FPS.
-- Intercepta `⌘⇧5` mediante un `CGEventTap`; requiere permiso de Accesibilidad.
+- Registra `⌘⇧5` mediante Carbon `RegisterEventHotKey`; no requiere permiso de
+  Accesibilidad cuando el atajo nativo de Apple está desactivado.
 - El selector propio permite elegir región o pantalla en el monitor del cursor.
 - La grabación propia usa ScreenCaptureKit, H.264 y audio del sistema AAC.
 - ScreenshotShelf se excluye del video para que el HUD no quede grabado.
