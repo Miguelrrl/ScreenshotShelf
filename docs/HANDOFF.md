@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.5.3`
-- Build en desarrollo: `21`
-- Último tag publicado antes de este cambio: `v0.5.2`
+- Versión en desarrollo: `0.6.0`
+- Build en desarrollo: `22`
+- Último tag publicado antes de este cambio: `v0.5.3`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -50,6 +50,12 @@
   captura se guarda directamente en el destino predeterminado.
 - El temporizador de guardado automático continúa aunque el cursor esté sobre
   la miniatura.
+- Detecta grabaciones `.mov` creadas por `⌘⇧5` cuando su tamaño permanece
+  estable durante al menos un segundo.
+- Muestra miniaturas de video persistentes con guardar, guardar como, editar,
+  descartar, mover y drag and drop.
+- El editor de video reproduce, navega y recorta el inicio y final.
+- Guarda videos como MP4 y exporta GIF de hasta dos minutos a 12 FPS.
 - `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
   conserva la captura sin cambios.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.

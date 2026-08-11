@@ -2,11 +2,11 @@ import AppKit
 import Sparkle
 import UniformTypeIdentifiers
 
-private let appName = "ScreenshotShelf"
-private let panelSize = NSSize(width: 192, height: 147)
+let appName = "ScreenshotShelf"
+let panelSize = NSSize(width: 192, height: 147)
 private let edgeMargin: CGFloat = 64
 private let panelGap: CGFloat = 12
-private let lastSaveAsDirectoryKey = "LastSaveAsDirectory"
+let lastSaveAsDirectoryKey = "LastSaveAsDirectory"
 let defaultScreenshotDirectoryKey = "DefaultScreenshotDirectory"
 let autoSaveEnabledKey = "AutoSaveEnabled"
 let autoSaveSecondsKey = "AutoSaveSeconds"
@@ -85,7 +85,7 @@ private func setNativeThumbnail(enabled: Bool) {
     _ = run("/usr/bin/killall", ["SystemUIServer"])
 }
 
-private func uniqueDestination(_ requested: URL) -> URL {
+func uniqueDestination(_ requested: URL) -> URL {
     guard FileManager.default.fileExists(atPath: requested.path) else { return requested }
     let directory = requested.deletingLastPathComponent()
     let stem = requested.deletingPathExtension().lastPathComponent
@@ -107,7 +107,15 @@ private func datedScreenshotDestination() -> URL {
     return uniqueDestination(screenshotDirectory().appendingPathComponent(name))
 }
 
-private func tagSavedFile(_ url: URL) {
+private func datedVideoDestination() -> URL {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+    let name = "ScreenshotShelf \(formatter.string(from: Date())).mp4"
+    return uniqueDestination(screenshotDirectory().appendingPathComponent(name))
+}
+
+func tagSavedFile(_ url: URL) {
     try? (url as NSURL).setResourceValue(
         [appName],
         forKey: URLResourceKey.tagNamesKey
@@ -604,6 +612,8 @@ final class ScreenshotManager {
     private var seen: Set<String> = []
     private var processing: Set<String> = []
     private var panels: [ThumbnailController] = []
+    private var videoPanels: [VideoThumbnailController] = []
+    private var videoObservations: [String: (size: Int, stableSince: Date)] = [:]
     private let launchedAt = Date()
     private let pendingDirectory: URL
 
@@ -663,7 +673,8 @@ final class ScreenshotManager {
             return
         }
 
-        for file in files where file.pathExtension.lowercased() == "png" {
+        let supportedExtensions: Set<String> = ["png", "mov"]
+        for file in files where supportedExtensions.contains(file.pathExtension.lowercased()) {
             let path = file.path
             guard !seen.contains(path), !processing.contains(path) else { continue }
             guard let values = try? file.resourceValues(forKeys: Set(keys)),
@@ -671,6 +682,18 @@ final class ScreenshotManager {
                   (values.fileSize ?? 0) > 0,
                   let modified = values.contentModificationDate,
                   modified >= launchedAt.addingTimeInterval(-1) else { continue }
+
+            if file.pathExtension.lowercased() == "mov" {
+                let size = values.fileSize ?? 0
+                if let observation = videoObservations[path], observation.size == size {
+                    guard Date().timeIntervalSince(observation.stableSince) >= 1 else {
+                        continue
+                    }
+                } else {
+                    videoObservations[path] = (size, Date())
+                    continue
+                }
+            }
 
             processing.insert(path)
             NSLog("%@: captura detectada %@", appName, file.lastPathComponent)
@@ -682,7 +705,12 @@ final class ScreenshotManager {
 
     private func stage(_ source: URL) {
         processing.remove(source.path)
+        videoObservations.removeValue(forKey: source.path)
         guard FileManager.default.fileExists(atPath: source.path) else { return }
+        if source.pathExtension.lowercased() == "mov" {
+            stageVideo(source)
+            return
+        }
         let original = datedScreenshotDestination()
         let staged = pendingDirectory
             .appendingPathComponent(UUID().uuidString + "-" + original.lastPathComponent)
@@ -706,6 +734,26 @@ final class ScreenshotManager {
         } catch {
             // The file may still be finishing; a later scan will retry it.
             NSLog("%@: no se pudo mover %@: %@", appName, source.path, error.localizedDescription)
+        }
+    }
+
+    private func stageVideo(_ source: URL) {
+        let original = datedVideoDestination()
+        let pendingName = original.deletingPathExtension().lastPathComponent + ".mov"
+        let staged = pendingDirectory.appendingPathComponent(
+            UUID().uuidString + "-" + pendingName
+        )
+        do {
+            try FileManager.default.moveItem(at: source, to: staged)
+            seen.insert(source.standardizedFileURL.path)
+            showVideo(staged: staged, original: original)
+        } catch {
+            NSLog(
+                "%@: no se pudo preparar la grabación %@: %@",
+                appName,
+                source.path,
+                error.localizedDescription
+            )
         }
     }
 
@@ -755,12 +803,52 @@ final class ScreenshotManager {
         relayout()
     }
 
+    private func showVideo(staged: URL, original: URL) {
+        guard let controller = VideoThumbnailController(
+            stagedURL: staged,
+            originalURL: original
+        ) else {
+            let fallback = uniqueDestination(
+                screenshotDirectory().appendingPathComponent(
+                    staged.lastPathComponent
+                )
+            )
+            try? FileManager.default.moveItem(at: staged, to: fallback)
+            seen.insert(fallback.standardizedFileURL.path)
+            return
+        }
+        controller.onSaved = { [weak self] destination in
+            self?.seen.insert(destination.standardizedFileURL.path)
+        }
+        controller.onFinished = { [weak self] finished in
+            self?.videoPanels.removeAll { $0 === finished }
+            self?.relayout()
+        }
+        videoPanels.insert(controller, at: 0)
+        while panels.count + videoPanels.count > 5 {
+            if let old = panels.last {
+                panels.removeLast()
+                try? FileManager.default.removeItem(at: old.stagedURL)
+                old.window?.orderOut(nil)
+            } else if let old = videoPanels.last {
+                videoPanels.removeLast()
+                try? FileManager.default.removeItem(at: old.stagedURL)
+                old.window?.orderOut(nil)
+            }
+        }
+        relayout()
+    }
+
     private func relayout() {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
         var y = frame.minY + edgeMargin
         for panel in panels where !panel.isManuallyPositioned {
+            panel.show(at: NSPoint(x: frame.minX + 24, y: y))
+            y += panelSize.height + panelGap
+        }
+        for panel in videoPanels where !panel.isManuallyPositioned {
             panel.show(at: NSPoint(x: frame.minX + 24, y: y))
             y += panelSize.height + panelGap
         }

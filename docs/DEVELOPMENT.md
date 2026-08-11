@@ -80,6 +80,11 @@ No ejecute simultáneamente el módulo `screenshot-thumb.lua` de Hammerspoon.
 15. Recortar cambia las dimensiones de la captura.
 16. Deshacer, rehacer y restablecer actualizan correctamente el lienzo.
 17. Cancelar conserva el PNG original y Aplicar refresca la miniatura.
+18. `⌘⇧5` permite grabar una región o pantalla mediante la interfaz de macOS.
+19. La miniatura de video aparece únicamente después de terminar la grabación.
+20. Guardar exporta un MP4 reproducible y cierra la miniatura.
+21. El editor permite recortar el inicio y final del video.
+22. Exportar GIF crea un archivo animado con el rango seleccionado.
 
 ## Diagnóstico
 

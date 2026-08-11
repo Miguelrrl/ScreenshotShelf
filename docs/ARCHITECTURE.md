@@ -49,6 +49,18 @@ elimina después de una espera breve.
 - Al pulsar `Aplicar`, renderizan las anotaciones y el recorte a PNG y reemplazan
   atómicamente el archivo de `Pending`.
 
+### Video
+
+- `ScreenshotManager` observa también archivos `.mov` creados por la interfaz
+  nativa `⌘⇧5` de macOS.
+- Antes de moverlos comprueba que su tamaño permanezca estable durante un
+  segundo para no intervenir durante una grabación activa.
+- `VideoThumbnailController` genera una vista previa, conserva el archivo en
+  `Pending` y ofrece edición, guardado MP4, descarte y drag and drop.
+- `VideoEditorWindowController` usa AVKit para reproducir y AVFoundation para
+  recortar y exportar.
+- La conversión GIF usa ImageIO, 12 FPS y un máximo de 1280 px.
+
 ### `AppDelegate`
 
 - Ejecuta la app como accesorio de barra de menú.
@@ -69,7 +81,7 @@ elimina después de una espera breve.
 ```text
 ⌘⇧4 / ⌘⇧5
       ↓
-macOS crea PNG
+macOS crea PNG o MOV
       ↓
 ScreenshotManager lo detecta
       ↓
@@ -77,7 +89,7 @@ Mueve PNG a Pending
       ↓
 ThumbnailController muestra NSPanel
       ↓
-Editar / Copiar / Guardar / X / Drag and drop
+Editar / Copiar / Guardar / GIF / X / Drag and drop
       ↓
 Cerrar panel y conservar o eliminar archivo
 ```
@@ -85,6 +97,9 @@ Cerrar panel y conservar o eliminar archivo
 ## Dependencias
 
 - AppKit
+- AVFoundation
+- AVKit
+- ImageIO
 - Foundation
 - Sparkle `2.9.2`
 
