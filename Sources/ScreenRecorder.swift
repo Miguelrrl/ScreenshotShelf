@@ -8,7 +8,11 @@ import ScreenCaptureKit
 private enum CaptureMode { case region, display }
 
 private final class CaptureSelectionView: NSView {
-    private enum DragAction { case create, move, resizeLeft, resizeRight, resizeTop, resizeBottom }
+    private enum DragAction {
+        case create, move, resizeLeft, resizeRight, resizeTop, resizeBottom
+        case resizeTopLeft, resizeTopRight, resizeBottomLeft, resizeBottomRight
+    }
+    var onCancel: (() -> Void)?
     var mode: CaptureMode = .region { didSet { needsDisplay = true } }
     var selection = NSRect.zero { didSet { needsDisplay = true } }
     private var dragStart: NSPoint?
@@ -23,7 +27,16 @@ private final class CaptureSelectionView: NSView {
         dragStart = point
         selectionAtDragStart = selection
         let edge: CGFloat = 12
-        if abs(point.x - selection.minX) <= edge, point.y >= selection.minY - edge, point.y <= selection.maxY + edge {
+        func near(_ target: NSPoint) -> Bool { hypot(point.x - target.x, point.y - target.y) <= edge * 1.5 }
+        if near(NSPoint(x: selection.minX, y: selection.maxY)) {
+            dragAction = .resizeTopLeft
+        } else if near(NSPoint(x: selection.maxX, y: selection.maxY)) {
+            dragAction = .resizeTopRight
+        } else if near(NSPoint(x: selection.minX, y: selection.minY)) {
+            dragAction = .resizeBottomLeft
+        } else if near(NSPoint(x: selection.maxX, y: selection.minY)) {
+            dragAction = .resizeBottomRight
+        } else if abs(point.x - selection.minX) <= edge, point.y >= selection.minY - edge, point.y <= selection.maxY + edge {
             dragAction = .resizeLeft
         } else if abs(point.x - selection.maxX) <= edge, point.y >= selection.minY - edge, point.y <= selection.maxY + edge {
             dragAction = .resizeRight
@@ -66,13 +79,36 @@ private final class CaptureSelectionView: NSView {
             let top = selectionAtDragStart.maxY
             selection.origin.y = min(max(0, point.y), top - 20)
             selection.size.height = top - selection.minY
+        case .resizeTopLeft:
+            resize(left: point.x, right: nil, top: point.y, bottom: nil)
+        case .resizeTopRight:
+            resize(left: nil, right: point.x, top: point.y, bottom: nil)
+        case .resizeBottomLeft:
+            resize(left: point.x, right: nil, top: nil, bottom: point.y)
+        case .resizeBottomRight:
+            resize(left: nil, right: point.x, top: nil, bottom: point.y)
         }
+    }
+
+    private func resize(left: CGFloat?, right: CGFloat?, top: CGFloat?, bottom: CGFloat?) {
+        var rect = selectionAtDragStart
+        if let left {
+            rect.origin.x = min(max(0, left), selectionAtDragStart.maxX - 20)
+            rect.size.width = selectionAtDragStart.maxX - rect.minX
+        }
+        if let right { rect.size.width = min(bounds.maxX, max(selectionAtDragStart.minX + 20, right)) - rect.minX }
+        if let bottom {
+            rect.origin.y = min(max(0, bottom), selectionAtDragStart.maxY - 20)
+            rect.size.height = selectionAtDragStart.maxY - rect.minY
+        }
+        if let top { rect.size.height = min(bounds.maxY, max(selectionAtDragStart.minY + 20, top)) - rect.minY }
+        selection = rect
     }
 
     override func mouseUp(with event: NSEvent) { dragStart = nil }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { window?.windowController?.close() }
+        if event.keyCode == 53 { onCancel?() }
         else { super.keyDown(with: event) }
     }
 
@@ -95,6 +131,20 @@ private final class CaptureSelectionView: NSView {
             border.lineWidth = 2
             NSColor.white.setStroke()
             border.stroke()
+            let points = [
+                NSPoint(x: selection.minX, y: selection.minY), NSPoint(x: selection.midX, y: selection.minY),
+                NSPoint(x: selection.maxX, y: selection.minY), NSPoint(x: selection.minX, y: selection.midY),
+                NSPoint(x: selection.maxX, y: selection.midY), NSPoint(x: selection.minX, y: selection.maxY),
+                NSPoint(x: selection.midX, y: selection.maxY), NSPoint(x: selection.maxX, y: selection.maxY)
+            ]
+            NSColor.controlAccentColor.setFill()
+            NSColor.white.setStroke()
+            for point in points {
+                let handle = NSBezierPath(ovalIn: NSRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10))
+                handle.lineWidth = 2
+                handle.fill()
+                handle.stroke()
+            }
             let size = "(Int(selection.width)) × (Int(selection.height))"
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
@@ -110,6 +160,7 @@ private final class CaptureOverlayController: NSWindowController {
     private let selectionView = CaptureSelectionView()
     private let screen: NSScreen
     var onRecord: ((NSScreen, NSRect) -> Void)?
+    var onCancel: (() -> Void)?
 
     init(screen: NSScreen, initialSelection: NSRect) {
         self.screen = screen
@@ -128,6 +179,7 @@ private final class CaptureOverlayController: NSWindowController {
         super.init(window: window)
         buildInterface()
         selectionView.selection = initialSelection.intersection(selectionView.bounds)
+        selectionView.onCancel = { [weak self] in self?.cancel() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -182,7 +234,10 @@ private final class CaptureOverlayController: NSWindowController {
         selectionView.mode = .display
         selectionView.selection = selectionView.bounds
     }
-    @objc private func cancel() { close() }
+    @objc private func cancel() {
+        close()
+        onCancel?()
+    }
     @objc private func record() {
         let selection: NSRect
         if selectionView.mode == .display {
@@ -259,6 +314,7 @@ private final class RecordingHUDController: NSWindowController {
 private final class StreamWriter: NSObject, SCStreamOutput {
     private let queue = DispatchQueue(label: "ScreenshotShelf.Recorder")
     private let writer: AVAssetWriter
+    var outputURL: URL { writer.outputURL }
     private let videoInput: AVAssetWriterInput
     private let audioInput: AVAssetWriterInput
     private var started = false
@@ -339,6 +395,7 @@ final class ScreenRecordingCoordinator: NSObject {
     private var stream: SCStream?
     private var writer: StreamWriter?
     private var hotKeyRef: EventHotKeyRef?
+    private var escapeHotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var isRecording = false
 
@@ -356,12 +413,20 @@ final class ScreenRecordingCoordinator: NSObject {
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, userData in
-                guard let userData else { return OSStatus(eventNotHandledErr) }
+            { _, event, userData in
+                guard let event, let userData else { return OSStatus(eventNotHandledErr) }
                 let coordinator = Unmanaged<ScreenRecordingCoordinator>
                     .fromOpaque(userData)
                     .takeUnretainedValue()
-                DispatchQueue.main.async { coordinator.toggleCaptureUI() }
+                var identifier = EventHotKeyID()
+                GetEventParameter(
+                    event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                    nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier
+                )
+                DispatchQueue.main.async {
+                    if identifier.id == 2 { coordinator.cancelRecording() }
+                    else { coordinator.toggleCaptureUI() }
+                }
                 return noErr
             },
             1,
@@ -405,6 +470,9 @@ final class ScreenRecordingCoordinator: NSObject {
             self?.overlay = nil
             self?.storeSelection(rect, in: screen.frame.size)
             self?.startRecording(screen: screen, selection: rect)
+        }
+        controller.onCancel = { [weak self] in
+            self?.overlay = nil
         }
         overlay = controller
         controller.showOverlay()
@@ -488,6 +556,7 @@ final class ScreenRecordingCoordinator: NSObject {
                     self.stream = stream
                     self.writer = writer
                     self.isRecording = true
+                    self.registerEscapeHotKey()
                     let hudScreen = NSScreen.screens.first {
                         ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == selectedDisplayID
                     } ?? NSScreen.main!
@@ -508,19 +577,46 @@ final class ScreenRecordingCoordinator: NSObject {
         }
     }
 
-    func stopRecording() {
+    private func registerEscapeHotKey() {
+        guard escapeHotKeyRef == nil else { return }
+        let identifier = EventHotKeyID(signature: 0x53534846, id: 2)
+        RegisterEventHotKey(UInt32(kVK_Escape), 0, identifier, GetApplicationEventTarget(), 0, &escapeHotKeyRef)
+    }
+
+    private func unregisterEscapeHotKey() {
+        if let escapeHotKeyRef { UnregisterEventHotKey(escapeHotKeyRef) }
+        escapeHotKeyRef = nil
+    }
+
+    private func cancelRecording() {
+        if let overlay {
+            overlay.close()
+            self.overlay = nil
+        } else if isRecording {
+            stopRecording(discard: true)
+        }
+    }
+
+    func stopRecording(discard: Bool = false) {
         guard isRecording, let stream, let writer else { return }
         isRecording = false
+        unregisterEscapeHotKey()
         hud?.close()
         hud = nil
+        let outputURL = writer.outputURL
         Task {
             do { try await stream.stopCapture() }
-            catch { await MainActor.run { present(error) } }
+            catch where !discard { await MainActor.run { present(error) } }
+            catch { }
             await MainActor.run {
                 self.stream = nil
                 self.writer = nil
             }
             writer.finish { [weak self] result in
+                if discard {
+                    try? FileManager.default.removeItem(at: outputURL)
+                    return
+                }
                 switch result {
                 case .success(let url): self?.onFinished?(url)
                 case .failure(let error): self?.present(error)
