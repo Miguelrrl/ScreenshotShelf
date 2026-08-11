@@ -213,6 +213,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
     let stagedURL: URL
     let originalURL: URL
     var onFinished: ((ThumbnailController) -> Void)?
+    var onSaved: ((URL) -> Void)?
     private var dragStarted = false
     private weak var previewImageView: NSImageView?
     private var lastImageModificationDate: Date?
@@ -404,6 +405,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
                 )
             )
             try persistCapture(to: destination, replaceExisting: false)
+            onSaved?(destination)
             finish(deletePending: false)
         } catch {
             presentSaveError(error)
@@ -486,6 +488,7 @@ final class ThumbnailController: NSWindowController, NSDraggingSource {
                     to: destination,
                     replaceExisting: true
                 )
+                self.onSaved?(destination)
                 self.finish(deletePending: false)
             } catch {
                 self.presentSaveError(error)
@@ -702,6 +705,9 @@ final class ScreenshotManager {
 
     private func show(staged: URL, original: URL) {
         let controller = ThumbnailController(stagedURL: staged, originalURL: original)
+        controller.onSaved = { [weak self] destination in
+            self?.seen.insert(destination.standardizedFileURL.path)
+        }
         controller.onFinished = { [weak self] finished in
             self?.panels.removeAll { $0 === finished }
             self?.relayout()
