@@ -51,7 +51,7 @@ elimina después de una espera breve.
 
 ### Video
 
-- `ScreenshotManager` observa también archivos `.mov` creados por la interfaz
+- `ScreenshotManager` observa también archivos `.mov` y `.mp4` creados por la interfaz
   nativa `⌘⇧5` de macOS.
 - Antes de moverlos comprueba que su tamaño permanezca estable durante un
   segundo para no intervenir durante una grabación activa.

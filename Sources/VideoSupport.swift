@@ -152,6 +152,7 @@ final class VideoThumbnailController: NSWindowController, NSDraggingSource {
         preview.layer?.cornerRadius = 9
         preview.layer?.masksToBounds = true
         preview.beginDrag = { [weak self] event in self?.startDragging(event) }
+        preview.onClick = { [weak self] in self?.editVideo() }
         previewView = preview
         root.addSubview(preview)
 
@@ -277,7 +278,10 @@ final class VideoThumbnailController: NSWindowController, NSDraggingSource {
 
     @objc private func editVideo() {
         guard editorController == nil,
-              let editor = VideoEditorWindowController(videoURL: stagedURL) else {
+              let editor = VideoEditorWindowController(
+                videoURL: stagedURL,
+                defaultDestination: originalURL
+              ) else {
             NSSound.beep()
             return
         }
@@ -287,6 +291,11 @@ final class VideoThumbnailController: NSWindowController, NSDraggingSource {
         }
         editor.onGIFExported = { [weak self] destination in
             tagSavedFile(destination)
+            self?.finish(deletePending: true)
+        }
+        editor.onSaved = { [weak self] destination in
+            tagSavedFile(destination)
+            self?.onSaved?(destination)
             self?.finish(deletePending: true)
         }
         editor.onClose = { [weak self, weak editor] in
@@ -483,6 +492,7 @@ private final class VideoTrimTimelineView: NSView {
 
 final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
     private let videoURL: URL
+    private let defaultDestination: URL
     private let player: AVPlayer
     private let duration: Double
     private let playerView = AVPlayerView()
@@ -493,13 +503,15 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
     private var exporting = false
     var onApply: (() -> Void)?
     var onGIFExported: ((URL) -> Void)?
+    var onSaved: ((URL) -> Void)?
     var onClose: (() -> Void)?
 
-    init?(videoURL: URL) {
+    init?(videoURL: URL, defaultDestination: URL) {
         let asset = AVURLAsset(url: videoURL)
         let duration = CMTimeGetSeconds(asset.duration)
         guard duration.isFinite, duration > 0 else { return nil }
         self.videoURL = videoURL
+        self.defaultDestination = defaultDestination
         self.duration = duration
         player = AVPlayer(url: videoURL)
         let window = NSWindow(
@@ -553,21 +565,25 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
 
         let buttons = NSStackView()
         buttons.orientation = .horizontal
-        buttons.spacing = 10
-        let gif = NSButton(title: "Exportar GIF…", target: self, action: #selector(exportGIF))
+        buttons.spacing = 8
+        let gif = editorButton(symbol: "photo.on.rectangle.angled", label: "Exportar GIF", action: #selector(exportGIF))
+        let trim = editorButton(symbol: "scissors", label: "Aplicar recorte", action: #selector(applyTrim))
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let cancel = NSButton(title: "Cancelar", target: self, action: #selector(cancel))
-        let apply = NSButton(title: "Aplicar recorte", target: self, action: #selector(applyTrim))
-        apply.bezelColor = .controlAccentColor
+        let cancel = editorButton(symbol: "xmark", label: "Cancelar", action: #selector(cancel))
+        let saveAs = editorButton(symbol: "folder.badge.plus", label: "Guardar como…", action: #selector(saveAs))
+        let save = editorButton(symbol: "square.and.arrow.down", label: "Guardar", primary: true, action: #selector(save))
         buttons.addArrangedSubview(gif)
+        buttons.addArrangedSubview(trim)
         buttons.addArrangedSubview(spacer)
         buttons.addArrangedSubview(cancel)
-        buttons.addArrangedSubview(apply)
+        buttons.addArrangedSubview(saveAs)
+        buttons.addArrangedSubview(save)
 
         let controlsBackground = NSVisualEffectView()
-        controlsBackground.material = .sidebar
+        controlsBackground.material = .hudWindow
         controlsBackground.state = .active
+        controlsBackground.appearance = NSAppearance(named: .darkAqua)
         controlsBackground.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(controlsBackground)
         let controls = NSStackView(views: [timeline, rangeLabels, buttons])
@@ -597,6 +613,110 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
             rangeLabels.widthAnchor.constraint(equalTo: controls.widthAnchor),
             buttons.widthAnchor.constraint(equalTo: controls.widthAnchor)
         ])
+    }
+
+    private func editorButton(
+        symbol: String,
+        label: String,
+        primary: Bool = false,
+        action: Selector
+    ) -> NSButton {
+        let configuration = NSImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
+            .withSymbolConfiguration(configuration)
+        let button = NSButton(title: label, target: self, action: action)
+        button.image = image
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        button.imageScaling = .scaleNone
+        button.alignment = .center
+        button.font = .systemFont(ofSize: 13, weight: .medium)
+        button.contentTintColor = .white
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 10
+        button.layer?.borderWidth = primary ? 0 : 1
+        button.layer?.borderColor = NSColor.white.withAlphaComponent(0.13).cgColor
+        button.layer?.backgroundColor = (
+            primary ? NSColor.systemBlue.withAlphaComponent(0.9) : NSColor.white.withAlphaComponent(0.09)
+        ).cgColor
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        let minimumWidth: CGFloat
+        switch label {
+        case "Exportar GIF": minimumWidth = 112
+        case "Aplicar recorte": minimumWidth = 130
+        case "Guardar como…": minimumWidth = 132
+        default: minimumWidth = 104
+        }
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: minimumWidth).isActive = true
+        return button
+    }
+
+    @objc private func save() {
+        let destination = uniqueDestination(
+            screenshotDirectory().appendingPathComponent(defaultDestination.lastPathComponent)
+        )
+        exportSelection(to: destination, replaceExisting: false)
+    }
+
+    @objc private func saveAs() {
+        guard !exporting, let window else { return }
+        let panel = NSSavePanel()
+        panel.title = "Guardar grabación"
+        panel.prompt = "Guardar"
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = defaultDestination.lastPathComponent
+        if let path = UserDefaults.standard.string(forKey: lastSaveAsDirectoryKey) {
+            panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
+        } else {
+            panel.directoryURL = screenshotDirectory()
+        }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let destination = panel.url else { return }
+            UserDefaults.standard.set(
+                destination.deletingLastPathComponent().path,
+                forKey: lastSaveAsDirectoryKey
+            )
+            self.exportSelection(to: destination, replaceExisting: true)
+        }
+    }
+
+    private func exportSelection(to destination: URL, replaceExisting: Bool) {
+        guard !exporting else { return }
+        exporting = true
+        player.pause()
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if replaceExisting, FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+        } catch {
+            exporting = false
+            present(error)
+            return
+        }
+        exportVideo(
+            source: videoURL,
+            destination: destination,
+            fileType: .mp4,
+            start: timeline.startTime,
+            end: timeline.endTime
+        ) { [weak self] result in
+            guard let self else { return }
+            self.exporting = false
+            switch result {
+            case .success(let url):
+                self.onSaved?(url)
+                self.close()
+            case .failure(let error): self.present(error)
+            }
+        }
     }
 
     private func observePlayback() {
@@ -629,12 +749,12 @@ final class VideoEditorWindowController: NSWindowController, NSWindowDelegate {
         exporting = true
         player.pause()
         let temporary = videoURL.deletingLastPathComponent().appendingPathComponent(
-            UUID().uuidString + "-edited.mov"
+            UUID().uuidString + "-edited.mp4"
         )
         exportVideo(
             source: videoURL,
             destination: temporary,
-            fileType: .mov,
+            fileType: .mp4,
             start: timeline.startTime,
             end: timeline.endTime
         ) { [weak self] result in

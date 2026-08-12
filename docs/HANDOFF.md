@@ -4,9 +4,9 @@
 
 - Repositorio: `https://github.com/Miguelrrl/ScreenshotShelf`
 - Visibilidad: pública
-- Versión en desarrollo: `0.7.5`
-- Build en desarrollo: `28`
-- Último tag publicado antes de este cambio: `v0.7.4`
+- Versión en desarrollo: `0.7.6`
+- Build en desarrollo: `29`
+- Último tag publicado antes de este cambio: `v0.7.5`
 - macOS mínimo: `13.0`
 - Arquitecturas: Apple Silicon (`arm64`) e Intel (`x86_64`)
 - Actualizaciones: Sparkle `2.9.2`
@@ -50,7 +50,7 @@
   captura se guarda directamente en el destino predeterminado.
 - El temporizador de guardado automático continúa aunque el cursor esté sobre
   la miniatura.
-- Detecta grabaciones `.mov` creadas por `⌘⇧5` cuando su tamaño permanece
+- Detecta grabaciones `.mov` o `.mp4` creadas por `⌘⇧5` cuando su tamaño permanece
   estable durante al menos un segundo.
 - Muestra miniaturas de video persistentes con guardar, guardar como, editar,
   descartar, mover y drag and drop.
@@ -59,18 +59,26 @@
 - Registra `⌘⇧5` mediante Carbon `RegisterEventHotKey`; no requiere permiso de
   Accesibilidad cuando el atajo nativo de Apple está desactivado.
 - El selector propio permite elegir región o pantalla en el monitor del cursor.
-- La grabación propia usa ScreenCaptureKit, H.264 y audio del sistema AAC.
+- La grabación propia usa ScreenCaptureKit y produce MP4/H.264. El audio está
+  desactivado en `0.7.6` hasta implementar su ciclo y permisos por separado.
 - ScreenshotShelf se excluye del video para que el HUD no quede grabado.
+- La selección recuerda la última región; si no existe, crea una región
+  centrada que puede moverse y redimensionarse mediante ocho handles.
+- Al grabar, la región continúa visible, el exterior permanece oscurecido y la
+  barra/handles se ocultan. La capa no bloquea el mouse ni queda en el video.
+- `Esc` cierra el selector o cancela y descarta una grabación activa.
 - El editor usa una línea de tiempo única con fotogramas, manijas de recorte y
   cabezal de reproducción.
-- `Aplicar` reemplaza el archivo pendiente y actualiza la miniatura; `Cancelar`
-  conserva la captura sin cambios.
+- Un clic sobre la miniatura abre el editor; un arrastre inicia drag and drop.
+- El editor guarda el rango seleccionado en la carpeta predeterminada o en una
+  ubicación elegida, aplica recortes en MP4 y exporta GIF.
+- Las barras de selección y edición usan botones consistentes de icono y texto.
 - Permite elegir carpeta y nombre mediante el botón inferior `Guardar como…`.
 - Configura `~/Pictures/ScreenshotShelf` como destino de capturas.
 - Usa nombres `ScreenshotShelf <fecha> at <hora>.png` y etiqueta Finder.
 - Cierra la miniatura después de un drop aceptado.
 - Evita iniciar drag sin clic izquierdo y movimiento mínimo.
-- Los paneles no acompañan todos los Spaces.
+- Los paneles acompañan todos los Spaces.
 - Incluye icono de barra de menú y opción `Buscar actualizaciones…`.
 
 ## Configuración local relevante
@@ -81,10 +89,10 @@ El proyecto local original está en:
 /Users/MiguelRodriguez/Downloads/ScreenshotShelf-source
 ```
 
-La app local construida está en:
+La app instalada y ejecutable está en:
 
 ```text
-/Users/MiguelRodriguez/Downloads/ScreenshotShelf.app
+/Applications/ScreenshotShelf.app
 ```
 
 El módulo anterior de Hammerspoon está desactivado en:
@@ -108,14 +116,14 @@ corriendo; ambos procesos competirían por el mismo PNG.
 
 ## Próxima validación recomendada
 
-Publicar `0.3.0` y probar la actualización real desde una Mac que tenga `0.2.4`
-instalada en `/Applications`.
+Probar la actualización `0.7.6` desde otra Mac con `0.7.5` instalada en
+`/Applications`.
 
 Validar:
 
-1. `Buscar actualizaciones…` detecta `0.3.0`.
+1. `Buscar actualizaciones…` detecta `0.7.6`.
 2. Sparkle descarga y verifica el DMG.
 3. La app se reemplaza y reinicia.
 4. Gatekeeper no impide el reemplazo ad hoc.
-5. Todas las herramientas del editor producen el PNG esperado.
-6. Captura, copiar, guardar y drag and drop siguen funcionando.
+5. `⌘⇧5`, selector, MP4, recorte, guardado y GIF funcionan.
+6. Captura de imagen, copiar, guardar y drag and drop siguen funcionando.

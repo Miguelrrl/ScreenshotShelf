@@ -15,6 +15,7 @@ private final class CaptureSelectionView: NSView {
     var onCancel: (() -> Void)?
     var mode: CaptureMode = .region { didSet { needsDisplay = true } }
     var selection = NSRect.zero { didSet { needsDisplay = true } }
+    var showsRecordingBorder = false { didSet { needsDisplay = true } }
     private var dragStart: NSPoint?
     private var selectionAtDragStart = NSRect.zero
     private var dragAction: DragAction = .create
@@ -113,6 +114,20 @@ private final class CaptureSelectionView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        if showsRecordingBorder {
+            NSColor.clear.setFill()
+            bounds.fill(using: .copy)
+            let mask = NSBezierPath(rect: bounds)
+            mask.appendRect(selection)
+            mask.windingRule = .evenOdd
+            NSColor.black.withAlphaComponent(0.48).setFill()
+            mask.fill()
+            let border = NSBezierPath(rect: selection.insetBy(dx: 1.5, dy: 1.5))
+            border.lineWidth = 3
+            NSColor.systemRed.setStroke()
+            border.stroke()
+            return
+        }
         NSColor.black.withAlphaComponent(0.48).setFill()
         if mode == .display {
             bounds.fill()
@@ -159,6 +174,9 @@ private final class CaptureSelectionView: NSView {
 private final class CaptureOverlayController: NSWindowController {
     private let selectionView = CaptureSelectionView()
     private let screen: NSScreen
+    private weak var toolbar: NSVisualEffectView?
+    private weak var regionButton: NSButton?
+    private weak var displayButton: NSButton?
     var onRecord: ((NSScreen, NSRect) -> Void)?
     var onCancel: (() -> Void)?
 
@@ -190,22 +208,25 @@ private final class CaptureOverlayController: NSWindowController {
         selectionView.autoresizingMask = [.width, .height]
         content.addSubview(selectionView)
 
-        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 270, height: 58))
+        let bar = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 472, height: 62))
+        toolbar = bar
         bar.material = .hudWindow
         bar.state = .active
+        bar.appearance = NSAppearance(named: .darkAqua)
         bar.wantsLayer = true
         bar.layer?.cornerRadius = 15
         bar.layer?.masksToBounds = true
         bar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(bar)
 
-        let region = toolbarButton(symbol: "viewfinder", label: "Seleccionar área", action: #selector(selectRegion))
-        let display = toolbarButton(symbol: "display", label: "Grabar pantalla completa", action: #selector(selectDisplay))
-        let cancel = toolbarButton(symbol: "xmark", label: "Cancelar (Esc)", action: #selector(cancel))
+        let region = toolbarButton(symbol: "crop", title: "Área", label: "Seleccionar área", width: 92, action: #selector(selectRegion))
+        let display = toolbarButton(symbol: "display", title: "Pantalla", label: "Grabar pantalla completa", width: 112, action: #selector(selectDisplay))
+        let cancel = toolbarButton(symbol: "xmark", title: "Cancelar", label: "Cancelar (Esc)", width: 116, action: #selector(cancel))
         cancel.keyEquivalent = "\u{1b}"
         cancel.keyEquivalentModifierMask = []
-        let record = toolbarButton(symbol: "record.circle.fill", label: "Comenzar grabación", action: #selector(record))
-        record.contentTintColor = .systemRed
+        let record = toolbarButton(symbol: "record.circle.fill", title: "Grabar", label: "Comenzar grabación", width: 102, primary: true, action: #selector(record))
+        regionButton = region
+        displayButton = display
         let stack = NSStackView(views: [region, display, cancel, record])
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -215,25 +236,57 @@ private final class CaptureOverlayController: NSWindowController {
         NSLayoutConstraint.activate([
             bar.centerXAnchor.constraint(equalTo: content.centerXAnchor),
             bar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -42),
-            bar.widthAnchor.constraint(equalToConstant: 270),
-            bar.heightAnchor.constraint(equalToConstant: 58),
+            bar.widthAnchor.constraint(equalToConstant: 472),
+            bar.heightAnchor.constraint(equalToConstant: 62),
             stack.centerXAnchor.constraint(equalTo: bar.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: bar.centerYAnchor)
         ])
+        updateModeButtons()
     }
 
-    private func toolbarButton(symbol: String, label: String, action: Selector) -> NSButton {
-        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: label)!, target: self, action: action)
-        button.imagePosition = .imageOnly
-        button.bezelStyle = .texturedRounded
+    private func toolbarButton(
+        symbol: String,
+        title: String,
+        label: String,
+        width: CGFloat,
+        primary: Bool = false,
+        action: Selector
+    ) -> NSButton {
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?
+            .withSymbolConfiguration(.init(pointSize: 16, weight: .semibold))
+        let button = NSButton(title: title, target: self, action: action)
+        button.image = image
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        button.imageScaling = .scaleNone
+        button.alignment = .center
+        button.contentTintColor = .white
+        button.font = .systemFont(ofSize: 13, weight: .medium)
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 10
+        button.layer?.borderWidth = primary ? 0 : 1
+        button.layer?.borderColor = NSColor.white.withAlphaComponent(0.13).cgColor
+        button.layer?.backgroundColor = (
+            primary ? NSColor.systemRed.withAlphaComponent(0.9) : NSColor.white.withAlphaComponent(0.09)
+        ).cgColor
         button.toolTip = label
         button.setAccessibilityLabel(label)
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 44),
-            button.heightAnchor.constraint(equalToConstant: 36)
+            button.widthAnchor.constraint(equalToConstant: width),
+            button.heightAnchor.constraint(equalToConstant: 40)
         ])
         return button
+    }
+
+    private func updateModeButtons() {
+        regionButton?.layer?.backgroundColor = (
+            selectionView.mode == .region ? NSColor.systemBlue.withAlphaComponent(0.82) : NSColor.white.withAlphaComponent(0.09)
+        ).cgColor
+        displayButton?.layer?.backgroundColor = (
+            selectionView.mode == .display ? NSColor.systemBlue.withAlphaComponent(0.82) : NSColor.white.withAlphaComponent(0.09)
+        ).cgColor
     }
 
     func showOverlay() {
@@ -243,10 +296,21 @@ private final class CaptureOverlayController: NSWindowController {
         window?.makeFirstResponder(selectionView)
     }
 
-    @objc private func selectRegion() { selectionView.mode = .region }
+    func showRecordingBorder() {
+        toolbar?.isHidden = true
+        selectionView.showsRecordingBorder = true
+        window?.ignoresMouseEvents = true
+        window?.orderFrontRegardless()
+    }
+
+    @objc private func selectRegion() {
+        selectionView.mode = .region
+        updateModeButtons()
+    }
     @objc private func selectDisplay() {
         selectionView.mode = .display
         selectionView.selection = selectionView.bounds
+        updateModeButtons()
     }
     @objc private func cancel() {
         close()
@@ -263,7 +327,6 @@ private final class CaptureOverlayController: NSWindowController {
                 return
             }
         }
-        close()
         onRecord?(screen, selection)
     }
 }
@@ -330,11 +393,11 @@ private final class StreamWriter: NSObject, SCStreamOutput {
     private let writer: AVAssetWriter
     var outputURL: URL { writer.outputURL }
     private let videoInput: AVAssetWriterInput
-    private let audioInput: AVAssetWriterInput
     private var started = false
+    private var encodingError: Error?
 
     init(url: URL, width: Int, height: Int) throws {
-        writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: width,
@@ -344,20 +407,12 @@ private final class StreamWriter: NSObject, SCStreamOutput {
                 AVVideoExpectedSourceFrameRateKey: 30
             ]
         ])
-        audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 48_000,
-            AVNumberOfChannelsKey: 2,
-            AVEncoderBitRateKey: 192_000
-        ])
         videoInput.expectsMediaDataInRealTime = true
-        audioInput.expectsMediaDataInRealTime = true
         super.init()
-        guard writer.canAdd(videoInput), writer.canAdd(audioInput) else {
+        guard writer.canAdd(videoInput) else {
             throw CocoaError(.featureUnsupported)
         }
         writer.add(videoInput)
-        writer.add(audioInput)
     }
 
     func stream(
@@ -365,30 +420,45 @@ private final class StreamWriter: NSObject, SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of outputType: SCStreamOutputType
     ) {
-        guard sampleBuffer.isValid else { return }
+        guard sampleBuffer.isValid, outputType == .screen,
+              CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { return }
+        if let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: false
+        ) as? [[SCStreamFrameInfo: Any]],
+           let rawStatus = attachments.first?[.status] as? Int,
+           rawStatus != SCFrameStatus.complete.rawValue {
+            return
+        }
         queue.async {
-            if !self.started, outputType == .screen {
-                guard self.writer.startWriting() else { return }
+            guard self.encodingError == nil else { return }
+            if !self.started {
+                guard self.writer.startWriting() else {
+                    self.encodingError = self.writer.error ?? CocoaError(.fileWriteUnknown)
+                    return
+                }
                 self.writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
                 self.started = true
             }
             guard self.started else { return }
-            if outputType == .screen, self.videoInput.isReadyForMoreMediaData {
-                self.videoInput.append(sampleBuffer)
-            } else if outputType == .audio, self.audioInput.isReadyForMoreMediaData {
-                self.audioInput.append(sampleBuffer)
+            if self.videoInput.isReadyForMoreMediaData, !self.videoInput.append(sampleBuffer) {
+                self.encodingError = self.writer.error ?? CocoaError(.fileWriteUnknown)
             }
         }
     }
 
     func finish(completion: @escaping (Result<URL, Error>) -> Void) {
         queue.async {
+            if let error = self.encodingError {
+                self.writer.cancelWriting()
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
             guard self.started else {
                 DispatchQueue.main.async { completion(.failure(CocoaError(.fileWriteUnknown))) }
                 return
             }
             self.videoInput.markAsFinished()
-            self.audioInput.markAsFinished()
             let url = self.writer.outputURL
             self.writer.finishWriting {
                 DispatchQueue.main.async {
@@ -476,17 +546,18 @@ final class ScreenRecordingCoordinator: NSObject {
     }
 
     func showSelector() {
+        registerEscapeHotKey()
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
         let initialSelection = restoredSelection(in: screen.frame.size)
         let controller = CaptureOverlayController(screen: screen, initialSelection: initialSelection)
         controller.onRecord = { [weak self] screen, rect in
-            self?.overlay = nil
             self?.storeSelection(rect, in: screen.frame.size)
             self?.startRecording(screen: screen, selection: rect)
         }
         controller.onCancel = { [weak self] in
             self?.overlay = nil
+            self?.unregisterEscapeHotKey()
         }
         overlay = controller
         controller.showOverlay()
@@ -518,10 +589,12 @@ final class ScreenRecordingCoordinator: NSObject {
     private func startRecording(screen: NSScreen, selection: NSRect) {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             // macOS presents its own consent sheet. The user can retry after granting access.
+            restoreSelectorAfterFailure()
             return
         }
         guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { return }
         Task {
+            var stage = "obtener contenido compartible"
             do {
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
                 guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
@@ -544,9 +617,9 @@ final class ScreenRecordingCoordinator: NSObject {
                 configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
                 configuration.queueDepth = 8
                 configuration.pixelFormat = kCVPixelFormatType_32BGRA
-                configuration.capturesAudio = true
-                configuration.sampleRate = 48_000
-                configuration.channelCount = 2
+                // Audio capture is intentionally disabled until its permission and
+                // device lifecycle are handled independently from screen recording.
+                configuration.capturesAudio = false
                 configuration.showsCursor = true
                 let excludedApps = content.applications.filter {
                     $0.bundleIdentifier == Bundle.main.bundleIdentifier
@@ -560,13 +633,16 @@ final class ScreenRecordingCoordinator: NSObject {
                 let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                     .appendingPathComponent(appName).appendingPathComponent("Recordings")
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let url = directory.appendingPathComponent(UUID().uuidString + ".mov")
+                let url = directory.appendingPathComponent(UUID().uuidString + ".mp4")
+                stage = "crear escritor H.264"
                 let writer = try StreamWriter(url: url, width: width, height: height)
+                stage = "conectar video con ScreenCaptureKit"
                 try stream.addStreamOutput(writer, type: .screen, sampleHandlerQueue: DispatchQueue.global(qos: .userInteractive))
-                try stream.addStreamOutput(writer, type: .audio, sampleHandlerQueue: DispatchQueue.global(qos: .userInteractive))
+                stage = "iniciar ScreenCaptureKit"
                 try await stream.startCapture()
                 let selectedDisplayID = displayID
                 await MainActor.run {
+                    self.overlay?.showRecordingBorder()
                     self.stream = stream
                     self.writer = writer
                     self.isRecording = true
@@ -580,9 +656,11 @@ final class ScreenRecordingCoordinator: NSObject {
                     hud.showHUD()
                 }
             } catch {
+                let failedStage = stage
+                self.logRecordingError(error, stage: failedStage)
                 await MainActor.run {
                     if CGPreflightScreenCaptureAccess() {
-                        self.present(error)
+                        self.present(error, stage: failedStage)
                     } else {
                         self.showPermissionAlert()
                     }
@@ -591,10 +669,36 @@ final class ScreenRecordingCoordinator: NSObject {
         }
     }
 
+    private func restoreSelectorAfterFailure() {
+        guard overlay == nil, !isRecording else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self, self.overlay == nil, !self.isRecording else { return }
+            self.showSelector()
+        }
+    }
+
+    private func logRecordingError(_ error: Error, stage: String) {
+        let nsError = error as NSError
+        let line = "\(Date().ISO8601Format()) | \(stage) | \(nsError.domain) | \(nsError.code) | \(nsError.localizedDescription) | \(nsError.userInfo)\n"
+        NSLog("%@: %@", appName, line)
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(appName)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("recording-errors.log")
+        if let handle = try? FileHandle(forWritingTo: url) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
+    }
+
     private func registerEscapeHotKey() {
         guard escapeHotKeyRef == nil else { return }
         let identifier = EventHotKeyID(signature: 0x53534846, id: 2)
-        RegisterEventHotKey(UInt32(kVK_Escape), 0, identifier, GetApplicationEventTarget(), 0, &escapeHotKeyRef)
+        let status = RegisterEventHotKey(UInt32(kVK_Escape), 0, identifier, GetApplicationEventTarget(), 0, &escapeHotKeyRef)
+        if status != noErr { NSLog("%@: no se pudo registrar Esc (%d)", appName, status) }
     }
 
     private func unregisterEscapeHotKey() {
@@ -603,11 +707,12 @@ final class ScreenRecordingCoordinator: NSObject {
     }
 
     private func cancelRecording() {
-        if let overlay {
+        if isRecording {
+            stopRecording(discard: true)
+        } else if let overlay {
             overlay.close()
             self.overlay = nil
-        } else if isRecording {
-            stopRecording(discard: true)
+            unregisterEscapeHotKey()
         }
     }
 
@@ -617,6 +722,8 @@ final class ScreenRecordingCoordinator: NSObject {
         unregisterEscapeHotKey()
         hud?.close()
         hud = nil
+        overlay?.close()
+        overlay = nil
         let outputURL = writer.outputURL
         Task {
             do { try await stream.stopCapture() }
@@ -633,7 +740,10 @@ final class ScreenRecordingCoordinator: NSObject {
                 }
                 switch result {
                 case .success(let url): self?.onFinished?(url)
-                case .failure(let error): self?.present(error)
+                case .failure(let error):
+                    self?.logRecordingError(error, stage: "finalizar archivo MOV")
+                    self?.present(error, stage: "finalizar archivo MOV")
+                    self?.restoreSelectorAfterFailure()
                 }
             }
         }
@@ -651,11 +761,19 @@ final class ScreenRecordingCoordinator: NSObject {
         }
     }
 
-    private func present(_ error: Error) {
+    private func present(_ error: Error, stage: String? = nil) {
         NSSound.beep()
-        let alert = NSAlert(error: error)
+        let nsError = error as NSError
+        let alert = NSAlert()
         alert.messageText = "No se pudo iniciar la grabación"
+        let prefix = stage.map { "Etapa: \($0)\n" } ?? ""
+        alert.informativeText = "\(prefix)\(nsError.domain) (\(nsError.code))\n\(nsError.localizedDescription)"
+        alert.addButton(withTitle: "Aceptar")
         NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        if let window = overlay?.window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
     }
 }

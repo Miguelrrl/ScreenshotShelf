@@ -167,6 +167,7 @@ final class HoverContainerView: NSView {
 
 final class DragImageView: NSImageView {
     var beginDrag: ((NSEvent) -> Void)?
+    var onClick: (() -> Void)?
     private var dragOrigin: NSPoint?
 
     override func mouseDown(with event: NSEvent) {
@@ -188,6 +189,7 @@ final class DragImageView: NSImageView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if dragOrigin != nil, event.buttonNumber == 0 { onClick?() }
         dragOrigin = nil
     }
 }
@@ -678,7 +680,7 @@ final class ScreenshotManager {
             return
         }
 
-        let supportedExtensions: Set<String> = ["png", "mov"]
+        let supportedExtensions: Set<String> = ["png", "mov", "mp4"]
         for file in files where supportedExtensions.contains(file.pathExtension.lowercased()) {
             let path = file.path
             guard !seen.contains(path), !processing.contains(path) else { continue }
@@ -688,7 +690,7 @@ final class ScreenshotManager {
                   let modified = values.contentModificationDate,
                   modified >= launchedAt.addingTimeInterval(-1) else { continue }
 
-            if file.pathExtension.lowercased() == "mov" {
+            if ["mov", "mp4"].contains(file.pathExtension.lowercased()) {
                 let size = values.fileSize ?? 0
                 if let observation = videoObservations[path], observation.size == size {
                     guard Date().timeIntervalSince(observation.stableSince) >= 1 else {
@@ -712,7 +714,7 @@ final class ScreenshotManager {
         processing.remove(source.path)
         videoObservations.removeValue(forKey: source.path)
         guard FileManager.default.fileExists(atPath: source.path) else { return }
-        if source.pathExtension.lowercased() == "mov" {
+        if ["mov", "mp4"].contains(source.pathExtension.lowercased()) {
             stageVideo(source)
             return
         }
@@ -744,7 +746,7 @@ final class ScreenshotManager {
 
     private func stageVideo(_ source: URL) {
         let original = datedVideoDestination()
-        let pendingName = original.deletingPathExtension().lastPathComponent + ".mov"
+        let pendingName = original.deletingPathExtension().lastPathComponent + ".mp4"
         let staged = pendingDirectory.appendingPathComponent(
             UUID().uuidString + "-" + pendingName
         )
